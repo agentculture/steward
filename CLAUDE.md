@@ -30,6 +30,18 @@ When the first concrete code arrives, default to the patterns the rest of the wo
 
 If you choose differently, write the choice down here so future sessions don't second-guess it.
 
+## Skills convention
+
+Every skill in `.claude/skills/<name>/` ships:
+
+1. `SKILL.md` — explains *why* and *when* to use it. Frontmatter + short prose; no inline 10-step walk-throughs.
+2. `scripts/<entry-point>.sh` (or `.py`) — the script that automates the workflow. Following the skill should be "run this script," not "do these ten manual steps." If a skill doesn't have a script, write one before relying on it.
+3. **No external path dependencies.** Scripts must not reach into another skill's home-directory copy or any other location outside this repo. If a skill needs functionality from elsewhere, vendor it into the skill's own `scripts/` directory. This makes skills portable across Culture projects (Steward's mission is alignment; that requires copy-paste portability).
+
+Per-machine paths (Culture server manifest location, sibling-project paths, etc.) live in **`.claude/skills.local.yaml`** (git-ignored). A committed `.claude/skills.local.yaml.example` documents every key. Skills read the local file, falling back to the example when the local copy hasn't been created yet.
+
+Steward is a "skills supplier" for the Culture mesh. When a skill stabilizes here, the next step is propagating it to sibling projects (`culture`, `daria`, etc.) — the all-backends rule applied to skills.
+
 ## Working with Culture from here
 
 Steward will need to read or write Culture artifacts (agent definitions, server configs, mesh links). Useful entry points:

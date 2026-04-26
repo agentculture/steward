@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Per-machine skill config (each skill reads from this; see .example).
+.claude/skills.local.yaml
+
+# Per-skill local overrides (optional, machine-specific).
+.claude/skills/*/local.yaml
+.claude/skills/*/scripts/*.local.sh
