@@ -52,21 +52,15 @@ Pass via stdin. All fields are optional — only non-empty sections are rendered
 }
 ```
 
-## What It Updates
+## What it touches
 
-1. `pyproject.toml` — the `version = "x.y.z"` field. Single source of truth;
-   `steward/__init__.py` reads it via `importlib.metadata`, so there's no
-   separate `__version__` string to keep in sync.
-2. `CHANGELOG.md` — inserts a new `## [x.y.z] - YYYY-MM-DD` entry at the top.
+- `pyproject.toml` — the `version = "x.y.z"` field (single source of truth;
+  `steward/__init__.py` reads it via `importlib.metadata`, so there's no
+  separate `__version__` literal to keep in sync).
+- `CHANGELOG.md` — inserts a new `## [x.y.z] - YYYY-MM-DD` entry at the top.
 
-## Workflow
-
-When invoking this skill, the agent should:
-
-1. Determine the bump type from the staged/unstaged diff (patch for fixes,
-   minor for new features, major for breaking changes).
-2. Summarize the changes into `added` / `changed` / `fixed` lists.
-3. Pipe the JSON and run the script.
-4. Verify with `show`.
-5. Commit the bumped `pyproject.toml` + `CHANGELOG.md` alongside the code
-   changes, so the version-check CI job sees a consistent bump.
+The script does the rest. Pick a bump type from the diff (patch for fixes,
+minor for new features, major for breaking changes), summarize the diff into
+`added` / `changed` / `fixed` lists, pipe as JSON, and commit the resulting
+`pyproject.toml` + `CHANGELOG.md` alongside the code change so the
+`version-check` CI job sees a consistent bump.

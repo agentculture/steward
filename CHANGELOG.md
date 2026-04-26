@@ -5,14 +5,31 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1] - 2026-04-26
+## [0.1.2] - 2026-04-26
 
+### Added
+
+- `.markdownlint-cli2.yaml` at repo root mirroring afi-cli/cfafi (3143024675).
+- `lint` job in tests.yml running black --check, isort --check, flake8, bandit -c pyproject.toml, and markdownlint-cli2 (3143024677).
+- `.flake8` config so flake8 honors the 100-char line length and ignores E203/W503 (matches black).
+
+### Changed
+
+- `steward show` walk-up now stops at the git repo boundary so the script is only ever resolved within the user's current checkout (3143024681; eliminates the path-injection risk).
+- `bump.py` changelog formatter emits single blank lines between elements (markdownlint MD012 compliant). Past triple-newlines in the 0.1.1 entry cleaned up.
+- Tightened the `version-bump` SKILL.md: dropped the numbered Workflow section, replaced with short prose pointing to the script (3143024680).
+- Replaced the inline `# noqa: S603 - explanation` syntax in show.py with a separate explanatory comment block above and a bare `# noqa: S603` (SonarCloud python:S7632).
+
+### Fixed
+
+- CLAUDE.md: code-block fence now `text`-tagged (markdownlint MD040).
+
+## [0.1.1] - 2026-04-26
 
 ### Changed
 
 - test_python_m_steward_version uses sys.executable instead of literal python (3143024074).
 - show.sh returns exit 2 for user errors (unknown suffix) and exit 1 for env errors (missing manifest, missing PyYAML); the steward CLI maps these to USER_ERROR/ENV_ERROR respectively (3143024081).
-
 
 ### Fixed
 

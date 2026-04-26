@@ -93,25 +93,27 @@ def read_changelog_entries() -> dict:
 
 
 def format_changelog_section(new: str, entries: dict) -> str:
-    """Format a changelog section from entries dict."""
+    """Format a changelog section from entries dict.
+
+    Output uses single blank lines between elements (markdownlint MD012
+    compliant). Trailing blank line before the next existing entry is
+    included.
+    """
     today = date.today().isoformat()
-    lines = [f"## [{new}] - {today}\n"]
+    chunks = [f"## [{new}] - {today}\n"]
 
     for section in ("added", "changed", "fixed"):
         items = entries.get(section, [])
         if items:
-            lines.append(f"\n### {section.capitalize()}\n")
-            for item in items:
-                lines.append(f"- {item}")
-            lines.append("")
+            chunks.append(f"\n### {section.capitalize()}\n\n")
+            chunks.extend(f"- {item}\n" for item in items)
 
-    # If no entries at all, add empty sections
+    # If no entries at all, emit empty section stubs.
     if not any(entries.get(s) for s in ("added", "changed", "fixed")):
-        lines.append("\n### Added\n")
-        lines.append("\n### Changed\n")
-        lines.append("\n### Fixed\n")
+        chunks.append("\n### Added\n\n### Changed\n\n### Fixed\n")
 
-    return "\n".join(lines) + "\n"
+    chunks.append("\n")  # blank line before the next existing entry
+    return "".join(chunks)
 
 
 def update_changelog(project_root: Path, new: str, entries: dict) -> None:

@@ -19,26 +19,45 @@ from pathlib import Path
 from steward.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, StewardError
 
 
-def _resolve_skill_script() -> Path:
-    """Locate ``.claude/skills/agent-config/scripts/show.sh``.
+def _find_git_root(start: Path) -> Path | None:
+    """Return the nearest enclosing directory containing ``.git`` (or None)."""
+    for directory in (start, *start.parents):
+        if (directory / ".git").exists():
+            return directory
+    return None
 
-    Walks up from cwd looking for a ``.claude/skills/agent-config`` directory;
-    first match wins. This lets ``steward show`` work from anywhere inside a
-    Steward checkout.
+
+def _resolve_skill_script() -> Path:
+    """Locate ``.claude/skills/agent-config/scripts/show.sh`` inside the current
+    git repo.
+
+    Walks up from cwd, but **stops at the git repository boundary** so
+    ``steward show`` never executes a script from an ancestor directory
+    outside the user's current checkout. If cwd isn't inside any git repo,
+    only cwd itself is checked. This eliminates the "search-path injection"
+    risk where an attacker-placed ancestor directory could supply the script.
     """
-    current = Path.cwd().resolve()
+    start = Path.cwd().resolve()
+    repo_root = _find_git_root(start)
+
+    current = start
     while True:
         candidate = current / ".claude" / "skills" / "agent-config" / "scripts" / "show.sh"
         if candidate.is_file():
             return candidate
-        if current.parent == current:
+        if current == repo_root or current.parent == current:
+            # Hit the git boundary or the filesystem root — stop walking.
+            break
+        if repo_root is None:
+            # Not inside a git repo: only inspect cwd itself, never ancestors.
             break
         current = current.parent
+
     raise StewardError(
         code=EXIT_ENV_ERROR,
         message="agent-config skill script not found",
         remediation=(
-            "run from inside a Steward checkout that contains "
+            "run from inside a Steward git checkout that contains "
             ".claude/skills/agent-config/scripts/show.sh"
         ),
     )
@@ -65,8 +84,14 @@ def _handle(args: argparse.Namespace) -> int:
     # Capture and forward via Python streams so pytest's capsys/capfd both
     # see the output. Going through sys.stdout/sys.stderr.write keeps the
     # split (skill stdout → CLI stdout, skill stderr → CLI stderr).
+    #
+    # bandit S603: argv is a fixed list; the target is a positional string
+    # passed straight to the script (no shell, no expansion). Resolution
+    # of the script itself is constrained to the current git repo by
+    # _resolve_skill_script(), so an attacker can't substitute a different
+    # show.sh from an ancestor directory.
     try:
-        completed = subprocess.run(  # noqa: S603 - argv is fixed, target is user-supplied positional
+        completed = subprocess.run(  # noqa: S603
             [str(script), args.target],
             check=False,
             capture_output=True,

@@ -16,7 +16,7 @@ Steward aligns and maintains **resident agents** across Culture projects. It is 
 
 Distributed as **`steward-cli`** on PyPI (Trusted Publishing). The Python package is `steward`; the binary is `steward`. Layout follows the afi-cli pattern (top-level package, no `src/`):
 
-```
+```text
 steward/                    # Python package (pip install steward-cli)
 ├── __init__.py             # __version__ via importlib.metadata("steward-cli")
 ├── __main__.py             # python -m steward

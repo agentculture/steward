@@ -22,6 +22,40 @@ jobs:
 
       - run: uv run pytest -n auto --cov=steward --cov-report=xml:coverage.xml --cov-report=term -v
 
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+
+      - run: uv python install 3.12
+
+      - run: uv sync
+
+      - name: black --check
+        run: uv run black --check steward tests
+
+      - name: isort --check
+        run: uv run isort --check-only steward tests
+
+      - name: flake8
+        run: uv run flake8 steward tests
+
+      - name: bandit
+        run: uv run bandit -c pyproject.toml -r steward
+
+      - name: markdownlint-cli2
+        run: |
+          npm install -g markdownlint-cli2@0.21.0
+          markdownlint-cli2 "**/*.md" "#node_modules" "#.local"
+
   version-check:
     # Only run on PR events. On push to main after a merged PR, the
     # comparison would always fail (PR_VERSION == MAIN_VERSION because HEAD
