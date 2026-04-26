@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-04-26
+
+
+### Changed
+
+- test_python_m_steward_version uses sys.executable instead of literal python (3143024074).
+- show.sh returns exit 2 for user errors (unknown suffix) and exit 1 for env errors (missing manifest, missing PyYAML); the steward CLI maps these to USER_ERROR/ENV_ERROR respectively (3143024081).
+
+
+### Fixed
+
+- bump.py docstring no longer overstates what gets updated; the __init__.py rewrite is conditional and is a no-op for steward (3143024085).
+
 ## [0.1.0] - 2026-04-26
 
 ### Added

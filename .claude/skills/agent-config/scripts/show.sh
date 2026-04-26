@@ -6,6 +6,11 @@
 #
 # Path mode:   show.sh ../culture
 # Suffix mode: show.sh daria   (resolved via culture_server_yaml in skills.local.yaml)
+#
+# Exit codes:
+#   0   success
+#   1   environment error (missing manifest, missing PyYAML for suffix mode)
+#   2   user error (no target given, unknown suffix, target path doesn't exist)
 
 set -euo pipefail
 
@@ -57,17 +62,23 @@ else
         echo "  or pass an explicit path instead of suffix '$target'" >&2
         exit 1
     fi
-    DIR=$(python3 - "$SERVER_YAML" "$target" <<'PY'
+    # Use a dedicated exit code (2) for "unknown suffix" so the steward CLI
+    # wrapper can distinguish user errors (typo'd suffix) from env errors
+    # (missing manifest / PyYAML).
+    if ! DIR=$(python3 - "$SERVER_YAML" "$target" <<'PY'
 import sys, yaml, pathlib
 manifest_path, suffix = sys.argv[1], sys.argv[2]
 m = yaml.safe_load(pathlib.Path(manifest_path).read_text()) or {}
 agents = m.get('agents', {})
 entry = agents.get(suffix)
 if entry is None:
-    sys.exit(f"no agent registered with suffix {suffix!r} in {manifest_path}")
+    print(f"no agent registered with suffix {suffix!r} in {manifest_path}", file=sys.stderr)
+    sys.exit(2)
 print(entry['directory'] if isinstance(entry, dict) else entry)
 PY
-)
+); then
+        exit 2
+    fi
 fi
 
 DIR="${DIR/#\~/$HOME}"

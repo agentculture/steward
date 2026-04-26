@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Bump the version in pyproject.toml, __init__.py, and CHANGELOG.md.
+"""Bump the version in pyproject.toml and CHANGELOG.md.
+
+If the package's ``__init__.py`` contains a literal ``__version__ = "..."``
+assignment, the script also rewrites that value. In repos that read
+``__version__`` from package metadata (the steward-cli convention), the
+``__init__.py`` step is a no-op.
 
 Usage:
     bump.py major    # 0.1.0 -> 1.0.0

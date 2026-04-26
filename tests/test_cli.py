@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -87,9 +88,14 @@ def test_show_command_in_dir_without_skill_fails_cleanly(
 
 
 def test_python_m_steward_version() -> None:
-    """`python -m steward --version` works (proves __main__.py)."""
+    """`python -m steward --version` works (proves __main__.py).
+
+    Uses ``sys.executable`` so the subprocess runs in the same interpreter /
+    venv as the test runner — important under ``uv run pytest`` where the
+    bare ``python`` on PATH may point elsewhere.
+    """
     result = subprocess.run(
-        ["python", "-m", "steward", "--version"],
+        [sys.executable, "-m", "steward", "--version"],
         capture_output=True,
         text=True,
         check=False,
