@@ -25,7 +25,9 @@ steward/                    # Python package (pip install steward-cli)
     ├── _errors.py          # StewardError + EXIT_USER_ERROR / EXIT_ENV_ERROR
     ├── _output.py          # emit_result / emit_error / emit_diagnostic
     └── _commands/          # subcommand modules; each has register(sub) + handler
-        └── show.py         # `steward show <target>` → wraps agent-config skill
+        ├── show.py         # `steward show <target>` → wraps agent-config skill
+        ├── doctor.py       # `steward doctor` → single-repo or corpus diagnosis
+        └── _corpus.py      # corpus helpers used by `doctor --scope siblings`
 tests/                      # pytest suite
 .claude/skills/             # see "Skills convention" below
 .github/workflows/          # tests.yml + publish.yml (OIDC Trusted Publishing)
@@ -63,23 +65,35 @@ Steward is a "skills supplier" for the Culture mesh. When a skill stabilizes her
 
 ## Roadmap (CLI surface)
 
-The current CLI ships one verb (`steward show`). The next two verbs are
-`verify` (read-only diagnosis against the AgentCulture sibling pattern) and
-`doctor` (diagnose-and-fix; default dry-run, `--apply` to commit). Together
-they encode steward's mission as code instead of prose:
+The CLI ships two verbs today: `steward show` and `steward doctor`. Doctor
+runs in two modes — single-repo diagnosis (the original "verify" flow,
+folded into doctor) and corpus mode (the agent-iteration flow). The
+`--apply` repair mode is the next layer on top.
 
-- `steward verify <path>` — score a target repo against `docs/sibling-pattern.md`.
-  Aggregates findings across all selected checks, then exits non-zero if any
-  finding was reported. Human-readable findings go to stderr; `--json` emits
-  the structured findings list to stdout. The first cut runs steward's own
-  vendored `.claude/skills/pr-review/scripts/portability-lint.sh` against the
-  target (so the target doesn't need to vendor it), plus a skills-convention
-  check (every `SKILL.md` has a sibling `scripts/` entry-point).
-- `steward doctor <path>` — repair what `verify` flagged, where the repair is
-  unambiguous (missing `scripts/` directory, missing `.markdownlint-cli2.yaml`,
-  missing `.claude/skills.local.yaml.example`, etc.). Larger emissions (CLI
-  scaffold) land later as additional repair handlers, eventually consuming
-  `../afi-cli/afi/cite/_engine.py` rather than re-implementing it.
+- `steward doctor <path>` (default `--scope self`) — score a target repo
+  against `docs/sibling-pattern.md`. Aggregates findings across all
+  selected checks, then exits non-zero if any finding was reported.
+  Human-readable findings go to stderr; `--json` emits the structured
+  findings list to stdout. Today: `portability` (runs steward's own
+  vendored `.claude/skills/pr-review/scripts/portability-lint.sh` against
+  the target, so the target doesn't need to vendor it) and
+  `skills-convention` (every `SKILL.md` has a sibling `scripts/`
+  entry-point and matching frontmatter `name`).
+- `steward doctor --scope siblings` — walks every `culture.yaml` in the
+  workspace (`<workspace-root>/*/culture.yaml`, sibling-only by default),
+  tallies field/skill/CLAUDE.md-section frequency across the corpus to
+  synthesize `docs/perfect-patient.md`, scores every declared agent
+  against that baseline, and writes per-target feedback into
+  `<target>/docs/steward/steward-suggestions.md` (gated by a marker line
+  so hand-written content in that path is preserved). Diagnostic-only —
+  exits 0 even when individual agents drift from the baseline; that is
+  reported in the per-target file rather than as a CLI failure.
+- `steward doctor --apply` *(planned)* — repair what diagnosis flagged,
+  where the repair is unambiguous (missing `scripts/` directory, missing
+  `.markdownlint-cli2.yaml`, missing `.claude/skills.local.yaml.example`,
+  etc.). Larger emissions (CLI scaffold) land later as additional repair
+  handlers, eventually consuming `../afi-cli/afi/cite/_engine.py` rather
+  than re-implementing it.
 
 Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
 `pr-review`, etc.) are recorded in `docs/skill-sources.md` so `doctor` can

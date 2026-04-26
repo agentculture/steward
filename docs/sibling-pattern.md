@@ -2,12 +2,21 @@
 
 The shape every AgentCulture sibling repo (`steward`, `cfafi`, `ghafi`, `daria`,
 …) is expected to wear. This document is the single source of truth that
-`steward verify` and `steward doctor` consume.
+`steward doctor` consumes.
 
 The companion file `sibling-pattern.json` (TBD; emit from this doc) is the
-machine-readable form. Until it lands, the checks `verify` runs are hard-coded
-in `steward/cli/_commands/verify.py`; this document remains the human-readable
+machine-readable form. Until it lands, the checks `doctor` runs are hard-coded
+in `steward/cli/_commands/doctor.py`; this document remains the human-readable
 contract that those hard-coded checks are expected to honor.
+
+`steward doctor` runs in two modes:
+
+- **`--scope self <target>`** (default) — the single-repo invariants below
+  (portability, skills-convention).
+- **`--scope siblings`** — walks every `culture.yaml` in the workspace, scores
+  each declared agent against a corpus-derived baseline
+  (`docs/perfect-patient.md`, regenerated on each run), and writes a per-target
+  report into `<target>/docs/steward/steward-suggestions.md`.
 
 ## Required artifacts
 
@@ -29,9 +38,9 @@ contract that those hard-coded checks are expected to honor.
 ## Invariants (machine-checkable)
 
 The full set of invariants the AgentCulture sibling pattern asserts. The
-**Status** column reflects what is wired into `steward verify` *today*; items
-marked `(planned)` are described here as the contract `verify` is expected to
-grow into.
+**Status** column reflects what is wired into `steward doctor --scope self`
+*today*; items marked `(planned)` are described here as the contract `doctor`
+is expected to grow into.
 
 - **portability** *(implemented as `--check portability`)* — no
   `/home/<user>/...` paths in tracked files; no `~/.<dotfile>` config refs in
@@ -52,10 +61,11 @@ grow into.
 
 ## Repairs (machine-fixable, run by `steward doctor`)
 
-`steward doctor` is **not yet implemented** (see `CLAUDE.md`'s Roadmap
-section); the table below is the contract it will honor when it lands. A
-repair is included only if it is **deterministic and idempotent**. Where the
-right answer depends on judgement, `doctor` will report the gap and stop.
+`steward doctor --apply` is **not yet implemented** (see `CLAUDE.md`'s
+Roadmap section); the table below is the contract it will honor when it
+lands. A repair is included only if it is **deterministic and idempotent**.
+Where the right answer depends on judgement, `doctor` will report the gap
+and stop.
 
 | Invariant violated | Planned repair |
 |--------------------|----------------|
