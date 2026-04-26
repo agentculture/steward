@@ -12,23 +12,42 @@ Steward aligns and maintains **resident agents** across Culture projects. It is 
 
 "Resident agents" here means the long-lived agent processes that Culture spawns per machine/peer (e.g. `culture start <agent-name>`). Steward's role is to keep those agents' configuration, prompts, and lifecycle policies coherent across the mesh — not to run agents itself.
 
-## Current state
+## Project shape
 
-This repo is greenfield. As of the initial commit there is no source, no `pyproject.toml`, no tests, and no build system — just `README.md`, `LICENSE` (MIT, agentculture), and a standard Python `.gitignore` that includes a commented-out `uv.lock` line (Python + uv is the expected stack, matching the rest of the workspace).
+Distributed as **`steward-cli`** on PyPI (Trusted Publishing). The Python package is `steward`; the binary is `steward`. Layout follows the afi-cli pattern (top-level package, no `src/`):
 
-**Implication for Claude:** do not fabricate commands, modules, or architecture. When asked to add something, scaffold it deliberately and update this file as conventions emerge. Before claiming "the way we do X here is Y," check whether X actually exists yet.
+```text
+steward/                    # Python package (pip install steward-cli)
+├── __init__.py             # __version__ via importlib.metadata("steward-cli")
+├── __main__.py             # python -m steward
+└── cli/
+    ├── __init__.py         # argparse main(); _StewardArgumentParser
+    ├── _errors.py          # StewardError + EXIT_USER_ERROR / EXIT_ENV_ERROR
+    ├── _output.py          # emit_result / emit_error / emit_diagnostic
+    └── _commands/          # subcommand modules; each has register(sub) + handler
+        └── show.py         # `steward show <target>` → wraps agent-config skill
+tests/                      # pytest suite
+.claude/skills/             # see "Skills convention" below
+.github/workflows/          # tests.yml + publish.yml (OIDC Trusted Publishing)
+pyproject.toml              # version source-of-truth
+CHANGELOG.md                # Keep-a-Changelog
+```
 
-## Conventions to apply when scaffolding
+## Build / test / publish
 
-When the first concrete code arrives, default to the patterns the rest of the workspace already uses (don't reinvent):
+- **Install for dev:** `uv sync` (or `uv pip install -e .` then `uv pip install --group dev`).
+- **Run CLI from source:** `uv run steward --version` / `uv run python -m steward show ../culture`.
+- **Tests:** `uv run pytest -n auto -v`. CI runs on every PR + push to main.
+- **Version bump:** `python3 .claude/skills/version-bump/scripts/bump.py {patch|minor|major}` — updates `pyproject.toml` and prepends a CHANGELOG entry. **Required on every PR** (the `version-check` CI job comments on the PR and fails the run if the version matches main; AgentCulture rule, no exceptions for docs/config-only changes).
+- **Publish:** push to `main` triggers `.github/workflows/publish.yml` → builds with `uv build` → publishes `steward-cli` to PyPI via Trusted Publishing (no API tokens). PRs publish a `.dev<run_number>` to TestPyPI for smoke-testing. Fork PRs are skipped (no OIDC context). The release is whatever version is in `pyproject.toml` at merge time.
 
-- **Packaging:** `uv` + `pyproject.toml` with a `[project.scripts]` entry point. `uv venv && uv pip install -e ".[dev]"`.
-- **Tests:** `pytest`, run from the project root.
-- **Lint:** `flake8`, `pylint`, `bandit -r src/`, `black`, `isort` — same set as `culture`/`daria`.
-- **Versioning:** single source of truth (e.g. `__init__.py` or a `version.py`), bumped via the workspace `version-bump` skill before PRs.
-- **Markdown:** `markdownlint-cli2`. Commit a repo-local `.markdownlint-cli2.yaml` at the repo root once a stack is chosen, and lint against that — don't depend on a per-user home-directory config, since results would diverge between contributors and CI.
+## Conventions in use
 
-If you choose differently, write the choice down here so future sessions don't second-guess it.
+- **Packaging:** `uv` + `pyproject.toml` (hatchling backend), `[project.scripts]` entry point.
+- **Tests:** `pytest` (xdist + cov-xml in CI). Tests live under `tests/`.
+- **Lint:** `flake8`, `bandit`, `black`, `isort`. Run via uv (`uv run black steward tests`, etc.).
+- **Versioning:** single source of truth in `pyproject.toml`. `steward.__version__` is read at import time from package metadata — there is no separate `__version__` literal to keep in sync.
+- **Markdown:** `markdownlint-cli2` against a repo-local `.markdownlint-cli2.yaml` once one is committed. Don't depend on a per-user home-directory config.
 
 ## Skills convention
 
