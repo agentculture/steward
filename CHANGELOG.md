@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-26
+
+### Added
+
+- `steward verify <path>` — read-only diagnosis of a sibling repo against the
+  AgentCulture sibling pattern. Two checks today: `portability` (runs steward's
+  own vendored `portability-lint.sh --all` with `cwd=<target>`, so the target
+  doesn't need to vendor it and `verify` only ever executes a known-trusted
+  script) and `skills-convention` (every `SKILL.md` has a sibling `scripts/`
+  directory and a matching frontmatter `name`). Aggregates findings across all
+  selected checks; human-readable findings go to stderr, `--json` puts the
+  structured findings list on stdout. `--check <name>` repeatable. Exits 1 if
+  any finding was reported.
+- `docs/sibling-pattern.md` — single source of truth for the AgentCulture
+  sibling pattern (12 required artifacts, 5 machine-checkable invariants,
+  5 deterministic repairs). Consumed by `steward verify`; will be consumed
+  by the future `steward doctor`.
+- `docs/skill-sources.md` — per-skill upstream declarations and vendoring
+  policy so `doctor` can vendor deterministically.
+- `.claude/skills/doc-test-alignment/` — stub skill describing the intended
+  doc/test alignment workflow. Implementation TBD.
+- `tests/test_skills_convention.py` — repo-level invariants for steward's own
+  skills (every skill has SKILL.md + scripts/, frontmatter name matches dir,
+  no per-user/home-dir paths in skill scripts).
+- `tests/test_cli_verify.py` — end-to-end tests for the new verb, including a
+  dogfood test that runs `steward verify` against steward itself.
+
+### Changed
+
+- `CLAUDE.md` gains a "Roadmap (CLI surface)" section naming `verify` and
+  `doctor` as the next two verbs.
+- `.markdownlint-cli2.yaml` header comment reworded to avoid tripping the
+  portability lint with its own self-reference (caught by the new
+  `tests/test_cli_verify.py` dogfood test on first run).
+- `tests/test_cli.py` help-output assertion loosened to match individual
+  verb names instead of the literal `{show}` group, so adding verbs doesn't
+  break it.
+
 ## [0.1.2] - 2026-04-26
 
 ### Added

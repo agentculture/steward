@@ -61,6 +61,30 @@ Per-machine paths (Culture server manifest location, sibling-project paths, etc.
 
 Steward is a "skills supplier" for the Culture mesh. When a skill stabilizes here, the next step is propagating it to sibling projects (`culture`, `daria`, etc.) — the all-backends rule applied to skills.
 
+## Roadmap (CLI surface)
+
+The current CLI ships one verb (`steward show`). The next two verbs are
+`verify` (read-only diagnosis against the AgentCulture sibling pattern) and
+`doctor` (diagnose-and-fix; default dry-run, `--apply` to commit). Together
+they encode steward's mission as code instead of prose:
+
+- `steward verify <path>` — score a target repo against `docs/sibling-pattern.md`.
+  Aggregates findings across all selected checks, then exits non-zero if any
+  finding was reported. Human-readable findings go to stderr; `--json` emits
+  the structured findings list to stdout. The first cut runs steward's own
+  vendored `.claude/skills/pr-review/scripts/portability-lint.sh` against the
+  target (so the target doesn't need to vendor it), plus a skills-convention
+  check (every `SKILL.md` has a sibling `scripts/` entry-point).
+- `steward doctor <path>` — repair what `verify` flagged, where the repair is
+  unambiguous (missing `scripts/` directory, missing `.markdownlint-cli2.yaml`,
+  missing `.claude/skills.local.yaml.example`, etc.). Larger emissions (CLI
+  scaffold) land later as additional repair handlers, eventually consuming
+  `../afi-cli/afi/cite/_engine.py` rather than re-implementing it.
+
+Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
+`pr-review`, etc.) are recorded in `docs/skill-sources.md` so `doctor` can
+vendor deterministically.
+
 ## Working with Culture from here
 
 Steward will need to read or write Culture artifacts (agent definitions, server configs, mesh links). Useful entry points:

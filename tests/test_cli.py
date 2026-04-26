@@ -30,7 +30,9 @@ def test_no_args_prints_help_and_exits_zero(capsys: pytest.CaptureFixture[str]) 
     assert rc == 0
     captured = capsys.readouterr()
     assert "usage: steward" in captured.out
-    assert "{show}" in captured.out
+    # Subcommand list — match loosely so adding more verbs doesn't break this.
+    assert "show" in captured.out
+    assert "verify" in captured.out
 
 
 def test_unknown_command_exits_with_user_error_code(
