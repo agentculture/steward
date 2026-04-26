@@ -97,4 +97,6 @@ for s in "$DIR"/.claude/skills/*/SKILL.md; do
     ' "$s")
     printf "  %-30s %s\n" "$name" "${desc:0:120}"
 done
-[ "$found" -eq 0 ] && echo "  (no skills)"
+if [ "$found" -eq 0 ]; then
+    echo "  (no skills)"
+fi
