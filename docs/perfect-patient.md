@@ -26,7 +26,7 @@ Present in 30–80% of agents.
 
 Skills present in ≥80% of agent repos.
 
-_(none)_
+None yet.
 
 ## Recommended skills
 
@@ -39,11 +39,10 @@ Skills present in 30–80% of agent repos.
 
 Top-level `## …` headings present in ≥80% of agent repos.
 
-_(none)_
+None yet.
 
 ## Corpus stats
 
 - Agents counted: 8
 - Repos counted: 6
 - Generated on: 2026-04-26
-

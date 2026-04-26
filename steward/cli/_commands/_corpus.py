@@ -42,7 +42,7 @@ RECOMMENDED_THRESHOLD = 0.30
 
 # Placeholder used in baseline sections when no items are present. Kept
 # as a constant so the surface is single-sourced and matches in tests.
-NONE_PLACEHOLDER = "_(none)_"
+NONE_PLACEHOLDER = "None yet."
 
 
 @dataclass
