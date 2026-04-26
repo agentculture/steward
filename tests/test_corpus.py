@@ -209,7 +209,9 @@ def test_skill_bullets_carry_frontmatter_descriptions(tmp_path: Path) -> None:
     wins so the output is stable across runs."""
     repo = tmp_path / "alpha"
     repo.mkdir()
-    (repo / "culture.yaml").write_text(yaml.safe_dump({"agents": [{"suffix": "a", "backend": "claude"}]}))
+    (repo / "culture.yaml").write_text(
+        yaml.safe_dump({"agents": [{"suffix": "a", "backend": "claude"}]})
+    )
     (repo / ".claude" / "skills" / "run-tests" / "scripts").mkdir(parents=True)
     (repo / ".claude" / "skills" / "run-tests" / "SKILL.md").write_text(
         "---\nname: run-tests\n"
