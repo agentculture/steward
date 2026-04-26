@@ -23,10 +23,12 @@ if [[ -z "$REPO" ]]; then
     REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 fi
 
-# Append signature
-BODY="${BODY}
+# Append signature only if the body isn't already signed.
+if ! printf '%s' "$BODY" | grep -qE '(^|\n)[[:space:]]*-[[:space:]]+Claude[[:space:]]*$'; then
+    BODY="${BODY}
 
 - Claude"
+fi
 
 # Post reply
 REPLY_URL=$(gh api "repos/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" \
@@ -44,14 +46,14 @@ if [[ "$RESOLVE" == true ]]; then
           reviewThreads(first: 100) {
             nodes {
               id
-              comments(first: 1) {
+              comments(first: 100) {
                 nodes { databaseId }
               }
             }
           }
         }
       }
-    }" --jq ".data.repository.pullRequest.reviewThreads.nodes[] | select(.comments.nodes[0].databaseId == $COMMENT_ID) | .id")
+    }" --jq ".data.repository.pullRequest.reviewThreads.nodes[] | select(any(.comments.nodes[]; .databaseId == $COMMENT_ID)) | .id")
 
     if [[ -n "$THREAD_ID" ]]; then
         RESOLVED=$(gh api graphql -f query="

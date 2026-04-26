@@ -2,7 +2,7 @@
 # Steward pr-review workflow entry point.
 #
 # Subcommands:
-#   lint              run the portability lint on the staged diff
+#   lint              run the portability lint on the current diff (staged + unstaged)
 #   poll <PR>         fetch and display review comments
 #   reply <PR>        batch reply to review comments (JSONL on stdin), --resolve
 #   delta             dump CLAUDE.md head + culture.yaml for each sibling project
@@ -18,13 +18,29 @@ REPO_ROOT="$(cd "$SKILL_DIR/../../.." && pwd)"
 CFG="$REPO_ROOT/.claude/skills.local.yaml"
 [ -f "$CFG" ] || CFG="$REPO_ROOT/.claude/skills.local.yaml.example"
 
+# Read a top-level YAML list from CFG. Schema is intentionally tiny:
+#   <key>:
+#     - item
+#     - item
+# Stops at the next top-level key. No PyYAML dependency.
 read_list() {
-    python3 -c "
-import yaml, sys
-d = yaml.safe_load(open(sys.argv[1])) or {}
-for v in (d.get(sys.argv[2]) or []):
-    print(v)
-" "$CFG" "$1"
+    awk -v key="$1" '
+        function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+        {
+            line = $0
+            sub(/[[:space:]]+#.*$/, "", line)
+        }
+        in_list && line ~ /^[[:space:]]*-[[:space:]]*/ {
+            item = line
+            sub(/^[[:space:]]*-[[:space:]]*/, "", item)
+            item = trim(item)
+            sub(/^["\047]/, "", item); sub(/["\047]$/, "", item)
+            if (item != "") print item
+            next
+        }
+        in_list && line ~ /^[^[:space:]#]/ { exit }
+        line ~ ("^" key ":[[:space:]]*($|#)") { in_list = 1 }
+    ' "$CFG"
 }
 
 cmd="${1:-help}"

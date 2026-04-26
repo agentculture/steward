@@ -14,7 +14,7 @@ set -euo pipefail
 mode="${1:-diff}"
 case "$mode" in
     --all) files=$(git ls-files -- ':(exclude)*.lock') ;;
-    diff|--diff) files=$(git diff --diff-filter=AM --name-only HEAD -- ':(exclude)*.lock') ;;
+    diff|--diff) files=$(git diff --diff-filter=AMR --name-only HEAD -- ':(exclude)*.lock') ;;
     *) echo "Usage: $(basename "$0") [--all]" >&2; exit 2 ;;
 esac
 

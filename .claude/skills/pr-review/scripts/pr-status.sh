@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pr-status.sh — one-shot status overview for a shushu PR.
+# pr-status.sh — one-shot status overview for a Steward PR.
 #
 # Combines five things review feedback usually scatters across:
 #   1. PR state (open / merged / closed) + branch + author
@@ -157,4 +157,5 @@ if [[ "$INLINE_PENDING" -gt 0 ]]; then
 fi
 
 echo
-echo "(For full comment bodies: bash ~/.claude/skills/pr-review/scripts/pr-comments.sh $PR_NUMBER)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "(For full comment bodies: bash \"$SCRIPT_DIR/pr-comments.sh\" $PR_NUMBER)"

@@ -16,13 +16,20 @@ REPO_ROOT="$(cd "$SKILL_DIR/../../.." && pwd)"
 CFG="$REPO_ROOT/.claude/skills.local.yaml"
 [ -f "$CFG" ] || CFG="$REPO_ROOT/.claude/skills.local.yaml.example"
 
+# Read a top-level YAML scalar from CFG. Schema is intentionally tiny:
+#   key: value     (with optional surrounding quotes / trailing comment)
+# No PyYAML dependency.
 read_cfg() {
-    python3 -c "
-import yaml, sys
-d = yaml.safe_load(open(sys.argv[1])) or {}
-v = d.get(sys.argv[2], '')
-print(v if v is not None else '')
-" "$CFG" "$1"
+    awk -v key="$1" '
+        $0 ~ ("^" key ":[[:space:]]*") {
+            sub("^" key ":[[:space:]]*", "")
+            sub(/[[:space:]]*#.*$/, "")
+            sub(/^[[:space:]]+/, ""); sub(/[[:space:]]+$/, "")
+            sub(/^["\047]/, ""); sub(/["\047]$/, "")
+            print
+            exit
+        }
+    ' "$CFG"
 }
 
 target="${1:-}"
@@ -39,6 +46,15 @@ else
     if [ ! -f "$SERVER_YAML" ]; then
         echo "no server manifest at $SERVER_YAML — set culture_server_yaml in $CFG" >&2
         echo "or pass an explicit path instead of suffix '$target'" >&2
+        exit 1
+    fi
+    # Suffix mode parses Culture's server manifest, whose schema is dictated by
+    # Culture (not by us) and includes nested mappings — too rich for awk.
+    # We use python+PyYAML here, with a friendly install hint if it's missing.
+    if ! python3 -c 'import yaml' 2>/dev/null; then
+        echo "suffix mode needs Python + PyYAML to parse $SERVER_YAML" >&2
+        echo "  install: pip install --user pyyaml   (or: uv pip install pyyaml)" >&2
+        echo "  or pass an explicit path instead of suffix '$target'" >&2
         exit 1
     fi
     DIR=$(python3 - "$SERVER_YAML" "$target" <<'PY'

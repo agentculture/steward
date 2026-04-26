@@ -15,89 +15,92 @@ Steward's PRs touch agent prompts, `culture.yaml` configs, and cross-project
 guidance. The generic `pr-review` skills don't know that, so they miss two
 classes of bugs Steward keeps producing:
 
-- **Path leaks** — committing `/home/<user>/git/...` paths that work only on
+- **Path leaks** — committing absolute home-directory paths that work only on
   the author's machine. (PR #1 had four of these.)
 - **Per-user config dependencies** — referencing a dotfile under the user's
   home directory in repo guidance, breaking reproducibility for other
   contributors and CI.
 
 This skill specializes Culture's `pr-review` to catch both up front, plus an
-alignment-delta step when Steward-affecting files change.
+alignment-delta step when Steward-affecting files change. The workflow is
+encapsulated in `scripts/workflow.sh` — follow that, not a manual checklist.
 
 ## Prerequisites
 
-All scripts are local — vendored under `.claude/skills/pr-review/scripts/`.
-External tool dependencies: `gh` (GitHub CLI) and `jq`. Per-machine paths
-(sibling-project layout) live in `.claude/skills.local.yaml`; see the
-committed `.example` for the schema.
+Hard requirements: `gh` (GitHub CLI), `jq`, `bash`, `python3` (stdlib only),
+`curl` (used by `pr-status.sh`).
 
-## Workflow at a glance
+Soft requirement: `PyYAML` is needed **only for suffix mode** of the sibling
+`agent-config` skill, where it parses Culture's server manifest. Path mode
+and every `pr-review` script work without it. If suffix mode runs without
+PyYAML it exits with a clear install hint.
+
+Per-machine paths (sibling-project layout) live in
+`.claude/skills.local.yaml`; see the committed `.example` for the schema.
+
+## How to run
+
+`scripts/workflow.sh` is the entry point. Subcommands:
+
+| Command | Purpose |
+|---------|---------|
+| `workflow.sh lint` | Portability lint on the current diff (staged + unstaged). |
+| `workflow.sh poll <PR>` | Fetch and display all review comments. |
+| `workflow.sh delta` | Dump each sibling project's `CLAUDE.md` head + `culture.yaml`. |
+| `workflow.sh reply <PR>` | Batch reply (JSONL on stdin) and resolve threads. |
+| `workflow.sh help` | Print this list. |
+
+The vendored single-comment helpers — `pr-reply.sh`, `pr-status.sh` — live
+next to `workflow.sh` and are usable directly when batching isn't appropriate.
+
+## End-to-end flow
 
 ```text
 git checkout -b <type>/<desc>
 # ... edit ...
-.claude/skills/pr-review/scripts/workflow.sh lint     # before staging
-git add <files> && git commit -m "..."
-git push -u origin <branch>
-gh pr create --title "..." --body "..."
-sleep 300
-.claude/skills/pr-review/scripts/workflow.sh poll <PR>
-# ... triage; if CLAUDE.md/culture.yaml changed:
-.claude/skills/pr-review/scripts/workflow.sh delta
-# ... fix, re-lint, push ...
-.claude/skills/pr-review/scripts/workflow.sh reply <PR> <<< '{"comment_id":N,"body":"Fixed — ...\n\n- Claude"}'
-gh pr checks <PR>
-# Wait for human merge — never merge yourself
-```
-
-## Step 1 — Branch
-
-If on `main`, branch first.
-
-| Type | Pattern |
-|------|---------|
-| Bug fix | `fix/<short-desc>` |
-| Feature | `feat/<short-desc>` |
-| Docs | `docs/<short-desc>` |
-| Skill | `skill/<skill-name>` |
-
-Before adding work to an existing branch, check for an open PR:
-
-```bash
-gh pr view --json number,title,state --jq '{number,title,state}' 2>/dev/null
-```
-
-If a PR is open and your changes are unrelated, stop and ask the user before
-piling on.
-
-## Step 2 — Make changes, lint, commit
-
-### 2a — Edit
-
-Make the changes.
-
-### 2b — Portability lint
-
-```bash
 .claude/skills/pr-review/scripts/workflow.sh lint
+git commit -am "..." && git push -u origin <branch>
+gh pr create --title "..." --body "..."   # title <70 chars, body signed "- Claude"
+sleep 300                                  # wait for Qodo + Copilot
+.claude/skills/pr-review/scripts/workflow.sh poll <PR>
+# triage; if CLAUDE.md/culture.yaml/.claude/skills changed:
+.claude/skills/pr-review/scripts/workflow.sh delta
+# fix, re-lint, push
+.claude/skills/pr-review/scripts/workflow.sh reply <PR> < replies.jsonl
+gh pr checks <PR>
+# Wait for human merge — never merge yourself.
 ```
 
-Catches:
+Branch naming: `fix/<desc>`, `feat/<desc>`, `docs/<desc>`, `skill/<name>`.
+Commit/PR signature: `- Claude` (workspace convention). The reply script
+auto-appends `- Claude` only if the body isn't already signed, so JSONL
+entries can include or omit it.
 
-- Hard-coded `/home/<user>/...` paths in any tracked text file.
-- Per-user `~/.<dotfile>` config references in `*.md`, `*.yaml`, `*.toml`,
-  `*.json`. Carve-outs: `~/.claude/skills/.../scripts/` (vendored tool calls)
-  and `~/.culture/` (Culture mesh data the skills are supposed to read).
+## Triage rules
 
-If anything is flagged, fix it before staging. Acceptable replacements:
+For every comment, decide **FIX** or **PUSHBACK** with reasoning.
 
-- `../culture` / `../daria` for sibling projects (with the workspace-layout
-  assumption documented up top of `CLAUDE.md`).
-- `https://github.com/agentculture/culture` for repo URLs.
-- A repo-local `.markdownlint-cli2.yaml` or equivalent.
-- `$WORKSPACE/...` only if you also document the env var.
+Default to **FIX** for: portability complaints (always valid for Steward —
+recurring bug class), test or doc requests, style nits aligned with workspace
+conventions.
 
-### 2c — Greenfield-aware test/version steps
+Default to **PUSHBACK** for: architecture opinions that conflict with workspace
+`CLAUDE.md` or the all-backends rule; greenfield false-positives (e.g. "add
+tests" before there's any source — defer to a later PR, don't refuse).
+
+### Alignment-delta rule
+
+If the PR touches `CLAUDE.md`, `culture.yaml`, or anything under
+`.claude/skills/`, run `workflow.sh delta` **before** declaring FIX or
+PUSHBACK on each comment. The script dumps the head of every sibling
+project's `CLAUDE.md` plus the full `culture.yaml`, using `sibling_projects`
+from `skills.local.yaml`. Note any sibling that needs a follow-up PR and
+mention it in your reply.
+
+## Greenfield-aware steps
+
+The lint and the workflow script are always-on. Stack-specific steps are
+conditional and currently no-op (greenfield repo):
 
 ```bash
 [ -d tests ] && [ -f pyproject.toml ] && uv run pytest tests/ -x -q
@@ -105,125 +108,13 @@ If anything is flagged, fix it before staging. Acceptable replacements:
 [ -f .markdownlint-cli2.yaml ] && markdownlint-cli2 "$(git diff --name-only --cached '*.md')"
 ```
 
-While Steward is greenfield, every conditional is a no-op — that's fine.
-Revisit each line as the corresponding stack element lands.
+Revisit each line as the corresponding stack element actually lands.
 
-### 2d — Commit
+## Reply etiquette
 
-```bash
-git add <specific-files>
-git commit -m "$(cat <<'EOF'
-<imperative subject under 70 chars>
-
-<short body explaining the why>
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-EOF
-)"
-```
-
-## Step 3 — Push and create PR
-
-```bash
-git push -u origin <branch-name>
-gh pr create --title "<title>" --body "$(cat <<'EOF'
-## Summary
-- <bullets>
-
-## Test plan
-- [ ] <items>
-
-- Claude
-EOF
-)"
-```
-
-PR title under 70 chars. Sign the body `- Claude` (workspace convention).
-
-## Step 4 — Wait for automated reviewers
-
-Qodo and Copilot need ~5 minutes to post.
-
-```bash
-sleep 300
-```
-
-## Step 5 — Poll for comments
-
-```bash
-.claude/skills/pr-review/scripts/workflow.sh poll <PR>
-```
-
-Re-poll every 60s until either a comment shows up or three consecutive empty
-polls (reviewer is silent / not configured).
-
-## Step 6 — Triage each comment
-
-For every comment, decide **FIX** or **PUSHBACK**, with reasoning. Default to
-FIX for:
-
-- Portability complaints (always valid for Steward — recurring bug class).
-- Test or doc requests.
-- Style nits aligned with workspace conventions.
-
-Default to PUSHBACK for:
-
-- Architecture opinions that conflict with workspace `CLAUDE.md` or the
-  all-backends rule.
-- Greenfield false-positives ("add tests" before there's any source — defer,
-  don't refuse).
-
-### Steward alignment-delta rule
-
-If the PR touches `CLAUDE.md`, `culture.yaml`, or anything under
-`.claude/skills/`, before declaring FIX or PUSHBACK run:
-
-```bash
-.claude/skills/pr-review/scripts/workflow.sh delta
-```
-
-This dumps the head of each sibling project's `CLAUDE.md` and the full
-`culture.yaml`, using the `sibling_projects` list from `skills.local.yaml`.
-Note any sibling that needs a follow-up PR and mention it in your reply.
-
-## Step 7 — Fix and push
-
-Make the fixes, **re-run the portability lint**, commit referencing the
-review-comment IDs, push.
-
-## Step 8 — Reply and resolve
-
-```bash
-.claude/skills/pr-review/scripts/workflow.sh reply <PR> <<'EOF'
-{"comment_id": <id>, "body": "Fixed — <short summary>.\n\n- Claude"}
-{"comment_id": <id>, "body": "Pushback — <reasoning>.\n\n- Claude"}
-EOF
-```
-
-Single-comment variant:
-
-```bash
-.claude/skills/pr-review/scripts/pr-reply.sh --resolve <PR> <id> \
-    "Fixed — <summary>.\n\n- Claude"
-```
-
-Always sign with `- Claude`. Always pass `--resolve`. Every comment must get
-a reply — no silent fixes.
-
-## Step 9 — Verify clean state
-
-```bash
-gh pr checks <PR>
-gh pr view <PR> --json state,mergeable
-```
-
-Goal: every comment thread has a reply, checks are green or unchanged from
-before the fix-up. Steward currently has no SonarCloud integration — skip
-the sonarclaude step Culture's skill includes.
-
-## Step 10 — Hand off
-
-**Never merge yourself.** A human merges on the GitHub site.
-
-Steward isn't a registered mesh agent yet, so skip the IRC ping that
-Culture's flow ends with. Once Steward joins the mesh, revisit this step.
+Every comment must get a reply — no silent fixes. Always pass `--resolve`
+when batch-replying so threads close automatically. Reference the
+review-comment IDs in the fix-up commit message. Steward currently has no
+SonarCloud integration and isn't a registered mesh agent, so skip the
+sonarclaude check and the post-merge IRC ping that Culture's `pr-review`
+includes — those will return when Steward joins those systems.

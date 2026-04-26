@@ -32,7 +32,7 @@ THREADS_JSON=$(gh api graphql -f query="
         nodes {
           id
           isResolved
-          comments(first: 1) {
+          comments(first: 100) {
             nodes { databaseId }
           }
         }
@@ -41,11 +41,13 @@ THREADS_JSON=$(gh api graphql -f query="
   }
 }" --jq '.data.repository.pullRequest.reviewThreads.nodes')
 
+# Build a map from every comment ID in every thread → its thread metadata,
+# so replies in a thread also show resolved status (not just the first comment).
 THREAD_MAP=$(echo "$THREADS_JSON" | jq -r '
-  [.[] | {
-    comment_id: .comments.nodes[0].databaseId,
-    thread_id: .id,
-    resolved: .isResolved
+  [.[] as $t | $t.comments.nodes[] | {
+    comment_id: .databaseId,
+    thread_id: $t.id,
+    resolved: $t.isResolved
   }]
 ')
 
