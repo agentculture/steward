@@ -3,7 +3,8 @@
 Pure helpers, no CLI surface. The doctor command imports from here to:
 
 1. Discover every Culture agent declared in sibling repos
-   (:func:`discover_agents`),
+   (:func:`discover_agents`, which also surfaces manifest read/parse
+   failures as :class:`ManifestError` records returned alongside),
 2. Synthesize a ``perfect-patient.md`` baseline from the corpus
    (:func:`synthesize_perfect_patient`),
 3. Score one agent against that baseline
@@ -40,12 +41,20 @@ PERFECT_PATIENT_RELPATH = Path("docs") / "perfect-patient.md"
 REQUIRED_THRESHOLD = 0.80
 RECOMMENDED_THRESHOLD = 0.30
 
-CLAUDE_MD_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+# Regex captures everything after the heading marker; whitespace is
+# trimmed in Python (instead of a `\s*$` tail) so the pattern stays
+# linear and can't backtrack on lines with trailing whitespace.
+CLAUDE_MD_HEADING_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
+
+# Placeholder used in baseline sections when no items are present. Kept
+# as a constant so the surface is single-sourced and matches in tests.
+NONE_PLACEHOLDER = "_(none)_"
 
 
 @dataclass
 class Agent:
-    """One row from a sibling repo's ``culture.yaml`` ``agents:`` list."""
+    """One row from a sibling repo's ``culture.yaml`` ``agents:`` list
+    (or its single-agent root-level form)."""
 
     suffix: str
     backend: str
@@ -63,9 +72,9 @@ class AgentFinding:
     """One per-agent finding in the corpus mode.
 
     Mirrors :class:`steward.cli._commands.doctor.Finding` but adds an
-    ``agent`` and ``repo`` for grouping. Severity is informational here
-    (info/warning/error) — corpus mode is diagnostic only, never fails
-    the run on per-agent findings (only on writer/IO failures).
+    ``agent`` and ``repo`` for grouping. Severity is informational
+    (info/warning/error) — corpus mode is diagnostic only, and
+    per-agent findings do not determine the command's exit status.
     """
 
     check: str
@@ -82,6 +91,24 @@ class AgentFinding:
             "severity": self.severity,
             "message": self.message,
         }
+
+
+@dataclass
+class ManifestError:
+    """A culture.yaml that couldn't be read or parsed.
+
+    Returned from :func:`discover_agents` alongside the agents list so
+    the doctor pipeline can surface a finding for the affected repo
+    instead of silently dropping it from the corpus.
+    """
+
+    repo_path: Path
+    manifest_path: Path
+    message: str
+
+    @property
+    def repo_name(self) -> str:
+        return self.repo_path.name
 
 
 @dataclass
@@ -117,8 +144,77 @@ def _classify(counter: Counter, total: int) -> tuple[set, set]:
     return required, recommended
 
 
-def discover_agents(workspace_root: Path, *, skip_repos: set[str] | None = None) -> list[Agent]:
-    """Glob ``<workspace_root>/*/culture.yaml`` and return one Agent per row.
+def _read_manifest(manifest: Path) -> tuple[dict | None, str | None]:
+    """Return ``(data, error)``: exactly one is set.
+
+    Handles both ``OSError`` (unreadable file) and ``yaml.YAMLError``
+    (malformed YAML). The error message is human-readable and goes
+    into a per-repo finding so a broken manifest never silently drops
+    out of the corpus.
+    """
+    try:
+        text = manifest.read_text()
+    except OSError as exc:
+        return None, f"could not read culture.yaml: {exc}"
+    try:
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError as exc:
+        return None, f"could not parse culture.yaml: {exc}"
+    return data, None
+
+
+def _extract_agent_entries(data: dict) -> list[dict]:
+    """Return the agent dicts inside a parsed culture.yaml.
+
+    Supports both shapes the corpus uses today:
+
+    1. ``agents: [ {suffix, backend, ...}, ... ]`` for repos that
+       declare multiple agents (e.g. culture, daria).
+    2. Flat ``suffix:`` / ``backend:`` at the root for single-agent
+       repos (e.g. agex, shushu, reachy_nova).
+    """
+    if not isinstance(data, dict):
+        return []
+    if "suffix" in data and "agents" not in data:
+        return [data]
+    return list(data.get("agents", []) or [])
+
+
+def _build_agent(entry: dict, repo_path: Path, manifest_path: Path) -> Agent | None:
+    """Construct an Agent from a manifest row, or return None to skip.
+
+    Skips entries without a usable ``suffix``. Normalizes ``backend``
+    so an explicit YAML ``null`` becomes ``""`` rather than the
+    misleading string ``"None"`` — this also keeps baseline frequency
+    stats from getting skewed by a phantom backend value.
+    """
+    if not isinstance(entry, dict):
+        return None
+    suffix = entry.get("suffix")
+    if not suffix:
+        return None
+    backend_raw = entry.get("backend")
+    backend = "" if backend_raw is None else str(backend_raw)
+    return Agent(
+        suffix=str(suffix),
+        backend=backend,
+        repo_path=repo_path,
+        manifest_path=manifest_path,
+        raw=entry,
+    )
+
+
+def discover_agents(
+    workspace_root: Path,
+    *,
+    skip_repos: set[str] | None = None,
+) -> tuple[list[Agent], list[ManifestError]]:
+    """Glob ``<workspace_root>/*/culture.yaml`` and return discovered agents.
+
+    Returns ``(agents, errors)``. ``errors`` carries one
+    :class:`ManifestError` per culture.yaml that couldn't be read or
+    parsed — the doctor pipeline turns each into a per-repo finding so
+    broken manifests never silently disappear.
 
     Sibling-only by design: nested manifests
     (``culture/packages/agent-harness/culture.yaml``) are ignored to
@@ -131,46 +227,20 @@ def discover_agents(workspace_root: Path, *, skip_repos: set[str] | None = None)
     """
     skip = skip_repos or set()
     agents: list[Agent] = []
+    errors: list[ManifestError] = []
     for manifest in sorted(workspace_root.glob("*/culture.yaml")):
         repo_path = manifest.parent
         if repo_path.name in skip:
             continue
-        try:
-            data = yaml.safe_load(manifest.read_text()) or {}
-        except yaml.YAMLError:
-            # Skip unparseable manifests rather than aborting the
-            # whole run. Doctor reports per-repo errors via the
-            # report writer; a malformed manifest will surface as
-            # "no agents discovered" in that repo's report.
+        data, err = _read_manifest(manifest)
+        if err is not None:
+            errors.append(ManifestError(repo_path=repo_path, manifest_path=manifest, message=err))
             continue
-        # The corpus uses two interchangeable shapes for culture.yaml:
-        # (1) ``agents: [ {suffix, backend, ...}, ... ]`` for repos that
-        #     declare multiple agents (e.g. culture, daria); and
-        # (2) flat ``suffix:`` / ``backend:`` at the root for single-agent
-        #     repos (e.g. agex, shushu, reachy_nova). Both shapes are
-        #     valid Culture manifests — accept either.
-        if isinstance(data, dict) and "suffix" in data and "agents" not in data:
-            entries: list = [data]
-        elif isinstance(data, dict):
-            entries = list(data.get("agents", []) or [])
-        else:
-            entries = []
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            suffix = entry.get("suffix")
-            if not suffix:
-                continue
-            agents.append(
-                Agent(
-                    suffix=str(suffix),
-                    backend=str(entry.get("backend", "")),
-                    repo_path=repo_path,
-                    manifest_path=manifest,
-                    raw=entry,
-                )
-            )
-    return agents
+        for entry in _extract_agent_entries(data or {}):
+            agent = _build_agent(entry, repo_path, manifest)
+            if agent is not None:
+                agents.append(agent)
+    return agents, errors
 
 
 def _agent_skills(agent: Agent) -> set[str]:
@@ -235,7 +305,8 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "# Perfect patient",
         "",
         f"> Auto-generated by `steward doctor` on {today}.",
-        f"> Synthesized from {baseline.agent_count} agents across " f"{baseline.repo_count} repos.",
+        f"> Synthesized from {baseline.agent_count} agents across "
+        + f"{baseline.repo_count} repos.",
         ">",
         "> The baseline is descriptive, not prescriptive: it describes what",
         "> a typical healthy agent looks like in the current corpus, so",
@@ -247,7 +318,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Present in ≥80% of agents.",
         "",
     ]
-    lines.extend(_bullets(baseline.required_yaml_keys, empty="_(none)_"))
+    lines.extend(_bullets(baseline.required_yaml_keys))
     lines += [
         "",
         "## Recommended `culture.yaml` fields",
@@ -255,7 +326,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Present in 30–80% of agents.",
         "",
     ]
-    lines.extend(_bullets(baseline.recommended_yaml_keys, empty="_(none)_"))
+    lines.extend(_bullets(baseline.recommended_yaml_keys))
     lines += [
         "",
         "## Common skills baseline",
@@ -263,7 +334,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Skills present in ≥80% of agent repos.",
         "",
     ]
-    lines.extend(_bullets(baseline.required_skills, empty="_(none)_"))
+    lines.extend(_bullets(baseline.required_skills))
     lines += [
         "",
         "## Recommended skills",
@@ -271,7 +342,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Skills present in 30–80% of agent repos.",
         "",
     ]
-    lines.extend(_bullets(baseline.recommended_skills, empty="_(none)_"))
+    lines.extend(_bullets(baseline.recommended_skills))
     lines += [
         "",
         "## Common `CLAUDE.md` sections",
@@ -279,7 +350,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Top-level `## …` headings present in ≥80% of agent repos.",
         "",
     ]
-    lines.extend(_bullets(baseline.required_claude_md_sections, empty="_(none)_"))
+    lines.extend(_bullets(baseline.required_claude_md_sections))
     lines += [
         "",
         "## Corpus stats",
@@ -292,9 +363,9 @@ def render_perfect_patient(baseline: Baseline) -> str:
     return "\n".join(lines)
 
 
-def _bullets(items: set[str], *, empty: str) -> list[str]:
+def _bullets(items: set[str]) -> list[str]:
     if not items:
-        return [empty]
+        return [NONE_PLACEHOLDER]
     return [f"- `{item}`" for item in sorted(items)]
 
 
@@ -378,7 +449,7 @@ def render_repo_report(
         "",
         f"{REPORT_MARKER_PREFIX} on {today}.",
         "> Re-run `steward doctor --scope siblings` to refresh.",
-        "> See `steward/docs/perfect-patient.md` for the corpus baseline.",
+        "> See `docs/perfect-patient.md` in the steward checkout for the corpus baseline.",
         "",
         f"Repo: `{repo_path.name}` — {len(agents)} agent(s) declared.",
         "",
@@ -425,15 +496,16 @@ def write_repo_report(
 
     Returns ``(path, status)`` where ``status`` ∈ {"written",
     "skipped-unmanaged"}. The "skipped-unmanaged" path is taken when
-    the file exists but lacks the marker line — i.e. someone wrote
-    something else there by hand. Pass ``overwrite_unmanaged=True`` to
-    bypass that safety (matches the future ``--apply`` semantics for
-    repair handlers, but we don't expose it as a flag yet).
+    the file exists but lacks the marker line **anywhere** — i.e.
+    someone wrote something else there by hand. Pass
+    ``overwrite_unmanaged=True`` to bypass that safety (matches the
+    future ``--apply`` semantics for repair handlers, but we don't
+    expose it as a flag yet).
     """
     target = repo_path / REPORT_RELPATH
     if target.is_file() and not overwrite_unmanaged:
-        existing_head = target.read_text().splitlines()[:5]
-        if not any(line.startswith(REPORT_MARKER_PREFIX) for line in existing_head):
+        existing_text = target.read_text()
+        if REPORT_MARKER_PREFIX not in existing_text:
             return target, "skipped-unmanaged"
 
     target.parent.mkdir(parents=True, exist_ok=True)

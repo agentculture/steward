@@ -16,7 +16,9 @@ Two modes:
 
 The roadmap's ``--apply`` repair mode (create missing `scripts/`,
 `.markdownlint-cli2.yaml`, etc.) is not yet implemented; corpus mode
-is diagnose-only and self mode never writes anything regardless.
+emits diagnostic *output* (per-target feedback files + the synthesized
+baseline) by default and provides ``--no-write-reports`` /
+``--no-refresh-perfect-patient`` opt-outs for pure dry-run.
 """
 
 from __future__ import annotations
@@ -65,11 +67,12 @@ def _find_git_root(start: Path) -> Path | None:
 
 
 def _resolve_steward_repo_root() -> Path:
-    """Locate the steward git checkout root (where docs/, .claude/, etc. live).
+    """Locate the *Steward* git checkout root.
 
-    Used by corpus mode to write `docs/perfect-patient.md` into the
-    right place, and by `_resolve_steward_portability_lint` indirectly
-    via the same walk.
+    A directory only counts as the Steward checkout if it contains the
+    vendored ``portability-lint.sh`` at the expected relative path. This
+    rejects sibling Culture repos that happen to share the
+    ``.claude/skills/`` layout but ship a different lint surface.
     """
     start = Path.cwd().resolve()
     repo_root = _find_git_root(start)
@@ -84,7 +87,7 @@ def _resolve_steward_repo_root() -> Path:
             code=EXIT_ENV_ERROR,
             message="not inside the Steward git checkout",
             remediation=(
-                f"run from inside a Steward checkout that contains " f"{PORTABILITY_LINT_RELPATH}"
+                f"run from inside a Steward checkout that contains {PORTABILITY_LINT_RELPATH}"
             ),
         )
     return repo_root
@@ -93,31 +96,14 @@ def _resolve_steward_repo_root() -> Path:
 def _resolve_steward_portability_lint() -> Path:
     """Locate steward's own vendored ``portability-lint.sh``.
 
-    Walks up from cwd, but **stops at the git repository boundary** (mirrors
-    the resolver in :mod:`steward.cli._commands.show`). Running steward's
-    own copy — instead of executing whatever script the *target* repo ships —
-    keeps ``doctor`` to a fixed, known-trusted code surface.
+    Anchors to the Steward checkout root via :func:`_resolve_steward_repo_root`,
+    then returns ``<root>/<PORTABILITY_LINT_RELPATH>``. This guarantees the
+    script we execute is the one shipped by Steward — not whatever
+    `.claude/skills/pr-review/scripts/portability-lint.sh` happens to live
+    in an ancestor git checkout (e.g. a sibling Culture repo whose layout
+    coincides with Steward's).
     """
-    start = Path.cwd().resolve()
-    repo_root = _find_git_root(start)
-
-    current = start
-    while True:
-        candidate = current / PORTABILITY_LINT_RELPATH
-        if candidate.is_file():
-            return candidate
-        if current == repo_root or current.parent == current:
-            break
-        if repo_root is None:
-            break
-        current = current.parent
-
-    hint = f"run from inside a Steward git checkout that contains {PORTABILITY_LINT_RELPATH}"
-    raise StewardError(
-        code=EXIT_ENV_ERROR,
-        message="steward's portability-lint.sh not found",
-        remediation=hint,
-    )
+    return _resolve_steward_repo_root() / PORTABILITY_LINT_RELPATH
 
 
 def _check_skills_convention(target: Path) -> list[Finding]:
@@ -170,18 +156,19 @@ def _check_portability(target: Path) -> list[Finding]:
     """Run steward's own vendored ``portability-lint.sh --all`` against the
     target's working tree.
 
-    The script is resolved from the steward checkout (not the target), then
-    invoked with ``cwd=target`` so its ``git ls-files`` lists target files.
-    This means ``doctor`` works whether or not the target has vendored its
-    own copy of the lint, and limits subprocess execution to a known-trusted
-    script.
+    The script is resolved from the Steward checkout root (not the
+    target), then invoked with ``cwd=target`` so its ``git ls-files``
+    lists target files. This means ``doctor`` works whether or not the
+    target has vendored its own copy of the lint, and limits subprocess
+    execution to a known-trusted script.
     """
     script = _resolve_steward_portability_lint()
     # bandit S603: argv is a fixed two-element list (resolved script path +
     # literal "--all"); no shell, no expansion. Script path comes from
-    # _resolve_steward_portability_lint() which is constrained to the
-    # current git checkout, so an attacker can't substitute a different
-    # portability-lint.sh from an ancestor directory.
+    # _resolve_steward_portability_lint(), which is anchored to the
+    # Steward checkout root via _resolve_steward_repo_root() (verified
+    # via the vendored portability-lint.sh sentinel), so the executed
+    # binary is fixed by the Steward checkout layout.
     try:
         completed = subprocess.run(  # noqa: S603
             [str(script), "--all"],
@@ -320,8 +307,7 @@ def _handle_self(args: argparse.Namespace) -> int:
     return 0 if not findings else 1
 
 
-def _handle_siblings(args: argparse.Namespace) -> int:
-    steward_root = _resolve_steward_repo_root()
+def _resolve_workspace_root(args: argparse.Namespace, steward_root: Path) -> Path:
     workspace_root = (
         args.workspace_root.expanduser().resolve()
         if args.workspace_root is not None
@@ -333,20 +319,111 @@ def _handle_siblings(args: argparse.Namespace) -> int:
             message=f"workspace root is not a directory: {workspace_root}",
             remediation="pass --workspace-root <existing-dir> or run from a Steward checkout",
         )
+    return workspace_root
+
+
+def _resolve_perfect_patient_path(args: argparse.Namespace, steward_root: Path) -> Path:
+    if args.perfect_patient_out is not None:
+        return args.perfect_patient_out.expanduser().resolve()
+    return steward_root / _corpus.PERFECT_PATIENT_RELPATH
+
+
+def _refresh_perfect_patient(baseline: _corpus.Baseline, pp_path: Path) -> None:
+    pp_path.parent.mkdir(parents=True, exist_ok=True)
+    pp_path.write_text(_corpus.render_perfect_patient(baseline) + "\n")
+
+
+def _run_repo_checks(repo_path: Path, selected_repo_checks: list[str]) -> list[Finding]:
+    """Run the per-repo CHECKS, surfacing env errors as findings instead
+    of aborting the whole sibling walk."""
+    repo_findings: list[Finding] = []
+    for name in selected_repo_checks:
+        try:
+            repo_findings.extend(CHECKS[name](repo_path))
+        except StewardError as err:
+            repo_findings.append(
+                Finding(check=name, path=".", message=f"check failed: {err.message}")
+            )
+    return repo_findings
+
+
+def _score_repo_agents(
+    repo_agents: list[_corpus.Agent], baseline: _corpus.Baseline
+) -> list[_corpus.AgentFinding]:
+    agent_findings: list[_corpus.AgentFinding] = []
+    for a in repo_agents:
+        agent_findings.extend(_corpus.score_culture_yaml_shape(a, baseline))
+        agent_findings.extend(_corpus.score_agent_against_baseline(a, baseline))
+    return agent_findings
+
+
+def _structured_repo_entries(
+    repo_name: str,
+    repo_findings: list[Finding],
+    agent_findings: list[_corpus.AgentFinding],
+) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for f in repo_findings:
+        out.append(
+            {
+                "scope": "repo",
+                "repo": repo_name,
+                "agent": "",
+                "check": f.check,
+                "severity": "warning",
+                "message": f.message,
+            }
+        )
+    for af in agent_findings:
+        out.append({"scope": "agent", **af.to_dict()})
+    return out
+
+
+def _emit_human_summary(
+    workspace_root: Path,
+    agents: list[_corpus.Agent],
+    repos: dict[Path, list[_corpus.Agent]],
+    args: argparse.Namespace,
+    pp_path: Path | None,
+    write_log: list[tuple[Path, str]],
+    structured: list[dict[str, str]],
+) -> None:
+    if not agents:
+        emit_diagnostic(f"no culture.yaml agents discovered under {workspace_root}")
+        return
+    emit_result(
+        f"doctor clinic: {len(agents)} agent(s) across {len(repos)} repo(s) "
+        f"under {workspace_root}"
+    )
+    if args.refresh_perfect_patient and pp_path is not None:
+        emit_diagnostic(f"perfect-patient.md refreshed at {pp_path}")
+    for path, status in write_log:
+        emit_diagnostic(f"  {status}: {path}")
+    for entry in structured:
+        if entry["scope"] == "repo":
+            emit_diagnostic(f"  [{entry['repo']}] {entry['check']}: {entry['message']}")
+        else:
+            emit_diagnostic(
+                f"  [{entry['repo']}/{entry['agent']}] "
+                f"{entry['severity']} {entry['check']}: {entry['message']}"
+            )
+
+
+def _handle_siblings(args: argparse.Namespace) -> int:
+    steward_root = _resolve_steward_repo_root()
+    workspace_root = _resolve_workspace_root(args, steward_root)
 
     # Skip steward itself: per-self diagnosis is what `--scope self` is for.
-    agents = _corpus.discover_agents(workspace_root, skip_repos={steward_root.name})
+    agents, manifest_errors = _corpus.discover_agents(
+        workspace_root, skip_repos={steward_root.name}
+    )
 
     baseline = _corpus.synthesize_baseline(agents)
 
+    pp_path: Path | None = None
     if args.refresh_perfect_patient:
-        pp_path = (
-            args.perfect_patient_out.expanduser().resolve()
-            if args.perfect_patient_out is not None
-            else steward_root / _corpus.PERFECT_PATIENT_RELPATH
-        )
-        pp_path.parent.mkdir(parents=True, exist_ok=True)
-        pp_path.write_text(_corpus.render_perfect_patient(baseline) + "\n")
+        pp_path = _resolve_perfect_patient_path(args, steward_root)
+        _refresh_perfect_patient(baseline, pp_path)
 
     selected_repo_checks = args.check or sorted(CHECKS.keys())
 
@@ -358,37 +435,24 @@ def _handle_siblings(args: argparse.Namespace) -> int:
     structured: list[dict[str, str]] = []
     write_log: list[tuple[Path, str]] = []
 
+    # Surface manifest read/parse errors so a broken culture.yaml doesn't
+    # silently disappear from the corpus output.
+    for err in manifest_errors:
+        structured.append(
+            {
+                "scope": "repo",
+                "repo": err.repo_name,
+                "agent": "",
+                "check": "manifest",
+                "severity": "warning",
+                "message": err.message,
+            }
+        )
+
     for repo_path, repo_agents in sorted(repos.items(), key=lambda kv: kv[0].name):
-        # Repo-level checks (portability + skills-convention) run once per repo.
-        repo_findings: list[Finding] = []
-        for name in selected_repo_checks:
-            try:
-                repo_findings.extend(CHECKS[name](repo_path))
-            except StewardError as err:
-                # Surface env errors per-repo without aborting the whole walk.
-                repo_findings.append(
-                    Finding(check=name, path=".", message=f"check failed: {err.message}")
-                )
-
-        # Per-agent checks (yaml shape + baseline alignment).
-        agent_findings: list[_corpus.AgentFinding] = []
-        for a in repo_agents:
-            agent_findings.extend(_corpus.score_culture_yaml_shape(a, baseline))
-            agent_findings.extend(_corpus.score_agent_against_baseline(a, baseline))
-
-        for f in repo_findings:
-            structured.append(
-                {
-                    "scope": "repo",
-                    "repo": repo_path.name,
-                    "agent": "",
-                    "check": f.check,
-                    "severity": "warning",
-                    "message": f.message,
-                }
-            )
-        for af in agent_findings:
-            structured.append({"scope": "agent", **af.to_dict()})
+        repo_findings = _run_repo_checks(repo_path, selected_repo_checks)
+        agent_findings = _score_repo_agents(repo_agents, baseline)
+        structured.extend(_structured_repo_entries(repo_path.name, repo_findings, agent_findings))
 
         if args.write_reports:
             body = _corpus.render_repo_report(repo_path, repo_agents, repo_findings, agent_findings)
@@ -402,25 +466,7 @@ def _handle_siblings(args: argparse.Namespace) -> int:
     if args.json:
         emit_result(json_mod.dumps(structured, indent=2))
     else:
-        if not agents:
-            emit_diagnostic(f"no culture.yaml agents discovered under {workspace_root}")
-        else:
-            emit_result(
-                f"doctor clinic: {len(agents)} agent(s) across {len(repos)} repo(s) "
-                f"under {workspace_root}"
-            )
-            if args.refresh_perfect_patient:
-                emit_diagnostic(f"perfect-patient.md refreshed at {pp_path}")
-            for path, status in write_log:
-                emit_diagnostic(f"  {status}: {path}")
-            for entry in structured:
-                if entry["scope"] == "repo":
-                    emit_diagnostic(f"  [{entry['repo']}] {entry['check']}: {entry['message']}")
-                else:
-                    emit_diagnostic(
-                        f"  [{entry['repo']}/{entry['agent']}] "
-                        f"{entry['severity']} {entry['check']}: {entry['message']}"
-                    )
+        _emit_human_summary(workspace_root, agents, repos, args, pp_path, write_log, structured)
 
     # Corpus mode is diagnostic — exit 0 unless we couldn't even start.
     return 0

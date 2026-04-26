@@ -40,16 +40,17 @@ def test_discover_agents_finds_one_per_yaml_row(tmp_path: Path) -> None:
         ],
     )
 
-    agents = _corpus.discover_agents(tmp_path)
+    agents, errors = _corpus.discover_agents(tmp_path)
     suffixes = sorted(a.suffix for a in agents)
     assert suffixes == ["a", "b", "c"]
+    assert errors == []
 
 
 def test_discover_agents_skips_named_repos(tmp_path: Path) -> None:
     _make_repo(tmp_path, "alpha", [{"suffix": "a", "backend": "claude"}])
     _make_repo(tmp_path, "skipme", [{"suffix": "s", "backend": "claude"}])
 
-    agents = _corpus.discover_agents(tmp_path, skip_repos={"skipme"})
+    agents, _errors = _corpus.discover_agents(tmp_path, skip_repos={"skipme"})
     assert [a.suffix for a in agents] == ["a"]
 
 
@@ -60,7 +61,7 @@ def test_discover_agents_handles_flat_root_shape(tmp_path: Path) -> None:
     repo = tmp_path / "shushu"
     repo.mkdir()
     (repo / "culture.yaml").write_text(yaml.safe_dump({"suffix": "shushu", "backend": "claude"}))
-    agents = _corpus.discover_agents(tmp_path)
+    agents, _errors = _corpus.discover_agents(tmp_path)
     assert len(agents) == 1
     assert agents[0].suffix == "shushu"
     assert agents[0].backend == "claude"
@@ -74,8 +75,30 @@ def test_discover_agents_skips_nested_manifests(tmp_path: Path) -> None:
     (nested / "culture.yaml").write_text(
         yaml.safe_dump({"agents": [{"suffix": "nested", "backend": "claude"}]})
     )
-    agents = _corpus.discover_agents(tmp_path)
+    agents, _errors = _corpus.discover_agents(tmp_path)
     assert [a.suffix for a in agents] == ["a"]
+
+
+def test_discover_agents_surfaces_yaml_parse_error(tmp_path: Path) -> None:
+    """A malformed culture.yaml must surface as a ManifestError, not vanish."""
+    repo = tmp_path / "broken"
+    repo.mkdir()
+    (repo / "culture.yaml").write_text("agents:\n  - suffix: a\n bad indent\n")
+    agents, errors = _corpus.discover_agents(tmp_path)
+    assert agents == []
+    assert len(errors) == 1
+    assert errors[0].repo_name == "broken"
+    assert "could not parse" in errors[0].message.lower()
+
+
+def test_discover_agents_normalizes_null_backend(tmp_path: Path) -> None:
+    """Explicit YAML ``null`` backend becomes ``""``, not the string ``"None"``."""
+    repo = tmp_path / "alpha"
+    repo.mkdir()
+    (repo / "culture.yaml").write_text("suffix: a\nbackend:\n")
+    agents, _errors = _corpus.discover_agents(tmp_path)
+    assert len(agents) == 1
+    assert agents[0].backend == ""
 
 
 def test_synthesize_baseline_classifies_by_frequency(tmp_path: Path) -> None:
@@ -85,7 +108,7 @@ def test_synthesize_baseline_classifies_by_frequency(tmp_path: Path) -> None:
         {"suffix": "rare", "backend": "claude", "tags": ["x"]}
     ]
     _make_repo(tmp_path, "r", rows)
-    agents = _corpus.discover_agents(tmp_path)
+    agents, _errors = _corpus.discover_agents(tmp_path)
 
     baseline = _corpus.synthesize_baseline(agents)
     # suffix and backend in 5/5 → required.
@@ -114,7 +137,7 @@ def test_score_culture_yaml_shape_flags_missing_required(tmp_path: Path) -> None
             {"suffix": "c", "backend": "claude"},  # missing `model`
         ],
     )
-    agents = _corpus.discover_agents(tmp_path)
+    agents, _errors = _corpus.discover_agents(tmp_path)
     baseline = _corpus.synthesize_baseline(agents)
     # model in 2/3 = 0.67 → recommended (between 0.30 and 0.80).
     assert "model" in baseline.recommended_yaml_keys
@@ -127,6 +150,7 @@ def test_score_culture_yaml_shape_flags_missing_required(tmp_path: Path) -> None
 
 
 def test_score_against_baseline_flags_missing_skills(tmp_path: Path) -> None:
+    """4/5 repos carry `common-skill`; the 1 that doesn't gets flagged."""
     _make_repo(
         tmp_path,
         "alpha",
@@ -143,12 +167,8 @@ def test_score_against_baseline_flags_missing_skills(tmp_path: Path) -> None:
         tmp_path,
         "gamma",
         [{"suffix": "c", "backend": "claude"}],
-        skills=[],  # missing the common skill
+        skills=[],  # missing the common skill — the agent we'll score
     )
-    agents = _corpus.discover_agents(tmp_path)
-    baseline = _corpus.synthesize_baseline(agents)
-    # common-skill in 2/3 repos = 0.67 → not required (below 0.80). Make
-    # it required by adding more conformant repos.
     _make_repo(
         tmp_path,
         "delta",
@@ -161,8 +181,9 @@ def test_score_against_baseline_flags_missing_skills(tmp_path: Path) -> None:
         [{"suffix": "e", "backend": "claude"}],
         skills=["common-skill"],
     )
-    agents = _corpus.discover_agents(tmp_path)
+    agents, _errors = _corpus.discover_agents(tmp_path)
     baseline = _corpus.synthesize_baseline(agents)
+    # common-skill in 4/5 repos = 0.80 → required threshold.
     assert "common-skill" in baseline.required_skills
 
     target = next(a for a in agents if a.suffix == "c")
@@ -173,7 +194,7 @@ def test_score_against_baseline_flags_missing_skills(tmp_path: Path) -> None:
 
 def test_render_perfect_patient_has_expected_sections(tmp_path: Path) -> None:
     _make_repo(tmp_path, "alpha", [{"suffix": "a", "backend": "claude"}])
-    agents = _corpus.discover_agents(tmp_path)
+    agents, _errors = _corpus.discover_agents(tmp_path)
     body = _corpus.render_perfect_patient(_corpus.synthesize_baseline(agents))
 
     assert "# Perfect patient" in body
@@ -185,7 +206,7 @@ def test_render_perfect_patient_has_expected_sections(tmp_path: Path) -> None:
 def test_write_repo_report_writes_marked_file(tmp_path: Path) -> None:
     repo = tmp_path / "alpha"
     repo.mkdir()
-    body = "# Steward suggestions\n\n" f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
+    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
     path, status = _corpus.write_repo_report(repo, body)
     assert status == "written"
     assert path == repo / _corpus.REPORT_RELPATH
@@ -195,11 +216,32 @@ def test_write_repo_report_writes_marked_file(tmp_path: Path) -> None:
 def test_write_repo_report_idempotent(tmp_path: Path) -> None:
     repo = tmp_path / "alpha"
     repo.mkdir()
-    body = "# Steward suggestions\n\n" f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
+    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
     _corpus.write_repo_report(repo, body)
     path, status = _corpus.write_repo_report(repo, body)
     assert status == "written"
     assert path.read_text().count("# Steward suggestions") == 1
+
+
+def test_write_repo_report_finds_marker_below_first_5_lines(tmp_path: Path) -> None:
+    """The marker scan covers the entire file — extra header lines (editor
+    banner, frontmatter, etc.) above the marker must NOT trigger the
+    skipped-unmanaged path."""
+    repo = tmp_path / "alpha"
+    target_dir = repo / "docs" / "steward"
+    target_dir.mkdir(parents=True)
+    target = target_dir / "steward-suggestions.md"
+    target.write_text(
+        "# Steward suggestions\n\n"
+        "<!-- editor banner line 1 -->\n"
+        "<!-- editor banner line 2 -->\n"
+        "<!-- editor banner line 3 -->\n"
+        "<!-- editor banner line 4 -->\n"
+        f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
+    )
+    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-02.\n"
+    _path, status = _corpus.write_repo_report(repo, body)
+    assert status == "written"
 
 
 def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
@@ -209,7 +251,7 @@ def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
     target = target_dir / "steward-suggestions.md"
     target.write_text("# Hand-written notes\n\nDon't overwrite me.\n")
 
-    body = "# Steward suggestions\n\n" f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
+    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
     path, status = _corpus.write_repo_report(repo, body)
     assert status == "skipped-unmanaged"
     assert "Hand-written notes" in path.read_text()
