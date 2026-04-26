@@ -32,8 +32,8 @@ class _StewardArgumentParser(argparse.ArgumentParser):
 def _build_parser() -> argparse.ArgumentParser:
     # Deferred import to avoid coupling the parser module to the command modules
     # at import time (matches afi-cli's pattern; cheap insurance).
+    from steward.cli._commands import doctor as _doctor_cmd
     from steward.cli._commands import show as _show_cmd
-    from steward.cli._commands import verify as _verify_cmd
 
     parser = _StewardArgumentParser(
         prog="steward",
@@ -47,7 +47,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", parser_class=_StewardArgumentParser)
 
     _show_cmd.register(sub)
-    _verify_cmd.register(sub)
+    _doctor_cmd.register(sub)
 
     return parser
 

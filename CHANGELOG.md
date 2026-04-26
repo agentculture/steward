@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-04-26
+
+### Added
+
+- `steward doctor --scope siblings` walks every `culture.yaml` in the workspace, scores each declared agent against a corpus-derived baseline, writes per-target feedback into `<target>/docs/steward/steward-suggestions.md` (gated by a marker line so hand-written content there is preserved), and refreshes `docs/perfect-patient.md` in the steward checkout. Diagnostic-only — corpus mode never exits non-zero on per-agent drift.
+- `docs/perfect-patient.md` — committed placeholder; populated on each `--scope siblings` run with required/recommended `culture.yaml` fields, the common skills baseline, common `CLAUDE.md` sections, and corpus stats.
+- `steward/cli/_commands/_corpus.py` — pure helpers (`discover_agents`, `synthesize_baseline`, `render_perfect_patient`, `score_culture_yaml_shape`, `score_agent_against_baseline`, `write_repo_report`) used by `doctor --scope siblings`. Tested in isolation by `tests/test_corpus.py`.
+- `tests/test_corpus.py` and `tests/test_cli_doctor_siblings.py` — unit + end-to-end coverage for corpus mode (discovery handles both `agents:` lists and flat root-level `suffix:` shapes; baseline classification by frequency; report writer is idempotent and preserves hand-written content; JSON output shape; empty-workspace diagnostic; --no-write-reports / --no-refresh-perfect-patient gates).
+
+### Changed
+
+- **Renamed `steward verify` → `steward doctor`** (single-repo mode). Same checks (`portability`, `skills-convention`), same flags (`--json`, `--check`), same exit semantics (non-zero on findings). New flags: `--scope {self,siblings}` (default `self` is backward-compatible with `verify`), `--workspace-root`, `--no-write-reports`, `--no-refresh-perfect-patient`, `--perfect-patient-out`. No `verify` alias kept — this is a breaking CLI change.
+- Added `pyyaml>=6.0` as the first runtime dependency. Required to parse sibling `culture.yaml` manifests in corpus mode; the existing `agent-config` skill already shells out to a Python+PyYAML one-liner, so the dep was implicit.
+- `docs/sibling-pattern.md` and `CLAUDE.md` Roadmap section rewritten to describe `doctor`'s two scopes (self / siblings) and reposition the planned `--apply` repair handlers as the next layer.
+
 ## [0.2.0] - 2026-04-26
 
 ### Added
@@ -71,7 +86,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- bump.py docstring no longer overstates what gets updated; the __init__.py rewrite is conditional and is a no-op for steward (3143024085).
+- bump.py docstring no longer overstates what gets updated; the `__init__.py` rewrite is conditional and is a no-op for steward (3143024085).
 
 ## [0.1.0] - 2026-04-26
 
