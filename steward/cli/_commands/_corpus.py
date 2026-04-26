@@ -22,7 +22,6 @@ isolation without going through argparse.
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
@@ -40,11 +39,6 @@ PERFECT_PATIENT_RELPATH = Path("docs") / "perfect-patient.md"
 # "recommended"; below 30% is "rare" and not included in the baseline.
 REQUIRED_THRESHOLD = 0.80
 RECOMMENDED_THRESHOLD = 0.30
-
-# Regex captures everything after the heading marker; whitespace is
-# trimmed in Python (instead of a `\s*$` tail) so the pattern stays
-# linear and can't backtrack on lines with trailing whitespace.
-CLAUDE_MD_HEADING_RE = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 
 # Placeholder used in baseline sections when no items are present. Kept
 # as a constant so the surface is single-sourced and matches in tests.
@@ -251,6 +245,13 @@ def _agent_skills(agent: Agent) -> set[str]:
 
 
 def _agent_claude_md_sections(agent: Agent) -> set[str]:
+    """Extract level-2 (`## ...`) heading titles from the agent's CLAUDE.md.
+
+    Iterates lines instead of using a regex: avoids both the
+    polynomial-backtracking hazard SonarCloud flags on multiline regex
+    anchored to ``$``, and the cost of compiling/matching a pattern
+    when a single ``startswith`` does the job.
+    """
     claude_md = agent.repo_path / "CLAUDE.md"
     if not claude_md.is_file():
         return set()
@@ -258,7 +259,14 @@ def _agent_claude_md_sections(agent: Agent) -> set[str]:
         text = claude_md.read_text()
     except OSError:
         return set()
-    return {m.group(1).strip() for m in CLAUDE_MD_HEADING_RE.finditer(text)}
+    sections: set[str] = set()
+    for line in text.splitlines():
+        # Match `## <title>` exactly — not `###`, `####`, etc.
+        if line.startswith("## ") and not line.startswith("### "):
+            title = line[3:].strip()
+            if title:
+                sections.add(title)
+    return sections
 
 
 def synthesize_baseline(agents: list[Agent]) -> Baseline:
