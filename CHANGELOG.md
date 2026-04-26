@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-04-26
+
+### Changed
+
+- `README.md` — document `steward doctor`. The previous Usage section listed only `steward show`, leaving the second verb (added in 0.2.0 as `verify`, renamed in 0.3.0, refined in 0.3.1) invisible to anyone who only reads the README. Adds both scopes (`--scope self` default, `--scope siblings`), the `--json` / `--check` flags, the `--apply` roadmap caveat, and cross-links to `docs/sibling-pattern.md` (the contract `doctor` honors) and `docs/perfect-patient.md` (the auto-generated corpus baseline).
+
 ## [0.3.1] - 2026-04-26
 
 ### Changed
