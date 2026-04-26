@@ -68,10 +68,13 @@ The current CLI ships one verb (`steward show`). The next two verbs are
 `doctor` (diagnose-and-fix; default dry-run, `--apply` to commit). Together
 they encode steward's mission as code instead of prose:
 
-- `steward verify <path>` — score a target repo against `docs/sibling-pattern.md`,
-  exit non-zero on the first failure, `--json` for structured output. The first
-  cut wraps `.claude/skills/pr-review/scripts/portability-lint.sh` and adds a
-  skills-convention check (every `SKILL.md` has a sibling `scripts/` entry-point).
+- `steward verify <path>` — score a target repo against `docs/sibling-pattern.md`.
+  Aggregates findings across all selected checks, then exits non-zero if any
+  finding was reported. Human-readable findings go to stderr; `--json` emits
+  the structured findings list to stdout. The first cut runs steward's own
+  vendored `.claude/skills/pr-review/scripts/portability-lint.sh` against the
+  target (so the target doesn't need to vendor it), plus a skills-convention
+  check (every `SKILL.md` has a sibling `scripts/` entry-point).
 - `steward doctor <path>` — repair what `verify` flagged, where the repair is
   unambiguous (missing `scripts/` directory, missing `.markdownlint-cli2.yaml`,
   missing `.claude/skills.local.yaml.example`, etc.). Larger emissions (CLI

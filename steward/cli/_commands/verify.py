@@ -1,10 +1,11 @@
 """``steward verify`` — read-only diagnosis of a sibling repo against the
 AgentCulture sibling pattern (`docs/sibling-pattern.md`).
 
-First cut: two checks — portability (delegates to the existing
-`portability-lint.sh --all`) and skills-convention (every `SKILL.md` has a
-sibling `scripts/` directory). Exit non-zero on the first failure. `--json`
-emits structured findings to stdout.
+First cut: two checks — `portability` (delegates to steward's own vendored
+`portability-lint.sh --all` run with the target as cwd) and `skills-convention`
+(every `SKILL.md` has a sibling `scripts/` directory). All findings are
+aggregated; the command exits non-zero if any check produced findings.
+`--json` emits structured findings to stdout.
 
 Future checks land here behind `--check <name>` flags. The full set of
 invariants is enumerated in `docs/sibling-pattern.md` ("Invariants").
@@ -16,7 +17,6 @@ import argparse
 import json as json_mod
 import re
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +24,7 @@ from steward.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, StewardError
 from steward.cli._output import emit_diagnostic, emit_result
 
 FRONTMATTER_NAME_RE = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
+PORTABILITY_LINT_RELPATH = Path(".claude/skills/pr-review/scripts/portability-lint.sh")
 
 
 @dataclass
@@ -45,6 +46,43 @@ def _resolve_target(raw: str) -> Path:
             remediation="pass a path to a sibling repo checkout",
         )
     return target
+
+
+def _find_git_root(start: Path) -> Path | None:
+    for directory in (start, *start.parents):
+        if (directory / ".git").exists():
+            return directory
+    return None
+
+
+def _resolve_steward_portability_lint() -> Path:
+    """Locate steward's own vendored ``portability-lint.sh``.
+
+    Walks up from cwd, but **stops at the git repository boundary** (mirrors
+    the resolver in :mod:`steward.cli._commands.show`). Running steward's
+    own copy — instead of executing whatever script the *target* repo ships —
+    keeps ``verify`` to a fixed, known-trusted code surface.
+    """
+    start = Path.cwd().resolve()
+    repo_root = _find_git_root(start)
+
+    current = start
+    while True:
+        candidate = current / PORTABILITY_LINT_RELPATH
+        if candidate.is_file():
+            return candidate
+        if current == repo_root or current.parent == current:
+            break
+        if repo_root is None:
+            break
+        current = current.parent
+
+    hint = f"run from inside a Steward git checkout that contains {PORTABILITY_LINT_RELPATH}"
+    raise StewardError(
+        code=EXIT_ENV_ERROR,
+        message="steward's portability-lint.sh not found",
+        remediation=hint,
+    )
 
 
 def _check_skills_convention(target: Path) -> list[Finding]:
@@ -87,28 +125,30 @@ def _check_skills_convention(target: Path) -> list[Finding]:
                 Finding(
                     check="skills-convention",
                     path=str(skill_md.relative_to(target)),
-                    message=(f"frontmatter name {match.group(1)!r} != " f"dir {skill_dir.name!r}"),
+                    message=f"frontmatter name {match.group(1)!r} != dir {skill_dir.name!r}",
                 )
             )
     return findings
 
 
 def _check_portability(target: Path) -> list[Finding]:
-    """Delegate to `.claude/skills/pr-review/scripts/portability-lint.sh --all`
-    if present in the *target* repo. Reports a single finding if the script is
-    missing (so the target knows it doesn't have the lint vendored yet).
+    """Run steward's own vendored ``portability-lint.sh --all`` against the
+    target's working tree.
+
+    The script is resolved from the steward checkout (not the target), then
+    invoked with ``cwd=target`` so its ``git ls-files`` lists target files.
+    This means ``verify`` works whether or not the target has vendored its
+    own copy of the lint, and limits subprocess execution to a known-trusted
+    script.
     """
-    script = target / ".claude" / "skills" / "pr-review" / "scripts" / "portability-lint.sh"
-    if not script.is_file():
-        return [
-            Finding(
-                check="portability",
-                path=str(script.relative_to(target)),
-                message="portability-lint.sh not vendored in target",
-            )
-        ]
+    script = _resolve_steward_portability_lint()
+    # bandit S603: argv is a fixed two-element list (resolved script path +
+    # literal "--all"); no shell, no expansion. Script path comes from
+    # _resolve_steward_portability_lint() which is constrained to the
+    # current git checkout, so an attacker can't substitute a different
+    # portability-lint.sh from an ancestor directory.
     try:
-        completed = subprocess.run(  # noqa: S603 - fixed argv, no shell
+        completed = subprocess.run(  # noqa: S603
             [str(script), "--all"],
             cwd=target,
             check=False,
@@ -144,8 +184,9 @@ def register(sub: argparse._SubParsersAction) -> None:
         "verify",
         help="Diagnose a sibling repo against the AgentCulture sibling pattern.",
         description=(
-            "Read-only diagnosis. Exits 0 if all checks pass, 1 on any "
-            "finding. See docs/sibling-pattern.md for the invariants."
+            "Read-only diagnosis. Aggregates findings across selected checks, "
+            "then exits 0 if there are none and 1 if there are any. See "
+            "docs/sibling-pattern.md for the invariants."
         ),
     )
     parser.add_argument(
@@ -155,13 +196,13 @@ def register(sub: argparse._SubParsersAction) -> None:
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit findings as JSON to stdout instead of human-readable lines.",
+        help="Emit findings as JSON to stdout instead of human-readable lines on stderr.",
     )
     parser.add_argument(
         "--check",
         action="append",
         choices=sorted(CHECKS.keys()),
-        help=("Run only the named check (repeatable). Default: run all checks."),
+        help="Run only the named check (repeatable). Default: run all checks.",
     )
     parser.set_defaults(func=_handle)
 
@@ -174,12 +215,14 @@ def _handle(args: argparse.Namespace) -> int:
         findings.extend(CHECKS[name](target))
 
     if args.json:
+        # Structured output is the command's *result* — goes to stdout per
+        # the steward stdout/stderr split.
         emit_result(json_mod.dumps([f.to_dict() for f in findings], indent=2))
+    elif findings:
+        # Human-readable findings are diagnostics — stderr by default.
+        for f in findings:
+            emit_diagnostic(f"{f.check}: {f.path}: {f.message}")
     else:
-        if findings:
-            for f in findings:
-                emit_diagnostic(f"{f.check}: {f.path}: {f.message}", stream=sys.stdout)
-        else:
-            emit_result(f"verify clean ({len(selected)} checks against {target})")
+        emit_result(f"verify clean ({len(selected)} checks against {target})")
 
     return 0 if not findings else 1

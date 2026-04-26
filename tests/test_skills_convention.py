@@ -51,6 +51,42 @@ def test_skill_frontmatter_name_matches_dir(skill_dir: Path) -> None:
     ), f"SKILL.md name {match.group(1)!r} != dir {skill_dir.name!r}"
 
 
+_HOME_RE = re.compile(r"/home/[a-z][a-z0-9_-]+/")
+# Match every per-user dotfile ref; carve_outs below allow specific shapes.
+_DOTFILE_RE = re.compile(r"~/\.[A-Za-z][A-Za-z0-9_-]*")
+_DOTFILE_CARVE_OUTS = (
+    re.compile(r"~/\.claude/skills/[^\s\"]+/scripts/"),
+    re.compile(r"~/\.culture/"),
+)
+
+
+def _scan_line_for_offenses(path: Path, lineno: int, line: str) -> list[str]:
+    offenses: list[str] = []
+    if _HOME_RE.search(line):
+        offenses.append(f"{path}:{lineno}: hard-coded /home/ path: {line.strip()}")
+    for hit in _DOTFILE_RE.finditer(line):
+        if any(c.match(line, hit.start()) for c in _DOTFILE_CARVE_OUTS):
+            continue
+        offenses.append(f"{path}:{lineno}: per-user dotfile ref: {line.strip()}")
+    return offenses
+
+
+def _read_text_or_none(path: Path) -> str | None:
+    try:
+        return path.read_text()
+    except UnicodeDecodeError:
+        return None
+
+
+def _iter_script_files() -> list[Path]:
+    files: list[Path] = []
+    for skill_dir in _skill_dirs():
+        for path in (skill_dir / "scripts").rglob("*"):
+            if path.is_file():
+                files.append(path)
+    return files
+
+
 def test_no_per_user_paths_in_skill_scripts() -> None:
     """No `/home/<user>/...` or per-user `~/.dotfile` refs in skill scripts.
 
@@ -60,31 +96,11 @@ def test_no_per_user_paths_in_skill_scripts() -> None:
     commit but the lint only ran on a different range).
     """
     offenders: list[str] = []
-    home_re = re.compile(r"/home/[a-z][a-z0-9_-]+/")
-    # Match the carve-outs from portability-lint.sh: ~/.claude/skills/.../scripts/
-    # and ~/.culture/ are allowed; everything else under ~/. is flagged.
-    dotfile_re = re.compile(r"~/\.[A-Za-z][A-Za-z0-9_-]*")
-    carve_outs = (
-        re.compile(r"~/\.claude/skills/[^\s\"]+/scripts/"),
-        re.compile(r"~/\.culture/"),
-    )
-
-    for skill_dir in _skill_dirs():
-        for path in (skill_dir / "scripts").rglob("*"):
-            if not path.is_file():
-                continue
-            try:
-                text = path.read_text()
-            except UnicodeDecodeError:
-                continue
-            for lineno, line in enumerate(text.splitlines(), start=1):
-                if home_re.search(line):
-                    offenders.append(f"{path}:{lineno}: hard-coded /home/ path: {line.strip()}")
-                for hit in dotfile_re.finditer(line):
-                    span_start = hit.start()
-                    # Allow the carve-outs by checking if any carve-out matches at this offset.
-                    if any(c.match(line, span_start) for c in carve_outs):
-                        continue
-                    offenders.append(f"{path}:{lineno}: per-user dotfile ref: {line.strip()}")
+    for path in _iter_script_files():
+        text = _read_text_or_none(path)
+        if text is None:
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            offenders.extend(_scan_line_for_offenses(path, lineno, line))
 
     assert not offenders, "skills/scripts portability violations:\n  " + "\n  ".join(offenders)

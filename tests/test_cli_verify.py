@@ -50,14 +50,17 @@ def test_verify_skills_convention_catches_missing_scripts(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Skill with SKILL.md but no scripts/ dir is reported."""
+    """Skill with SKILL.md but no scripts/ dir is reported on stderr."""
     skill = tmp_path / ".claude" / "skills" / "broken"
     skill.mkdir(parents=True)
     (skill / "SKILL.md").write_text("---\nname: broken\ndescription: x\n---\n")
     rc = main(["verify", "--check", "skills-convention", str(tmp_path)])
     captured = capsys.readouterr()
     assert rc == 1
-    assert "missing scripts/ directory" in captured.out
+    # Findings are diagnostics → stderr, per the stdout/stderr split in
+    # steward.cli._output.
+    assert "missing scripts/ directory" in captured.err
+    assert captured.out == ""
 
 
 def test_verify_skills_convention_catches_name_mismatch(
@@ -71,4 +74,5 @@ def test_verify_skills_convention_catches_name_mismatch(
     rc = main(["verify", "--check", "skills-convention", str(tmp_path)])
     captured = capsys.readouterr()
     assert rc == 1
-    assert "frontmatter name 'wrong-name' != dir 'real-name'" in captured.out
+    assert "frontmatter name 'wrong-name' != dir 'real-name'" in captured.err
+    assert captured.out == ""

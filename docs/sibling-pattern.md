@@ -5,8 +5,9 @@ The shape every AgentCulture sibling repo (`steward`, `cfafi`, `ghafi`, `daria`,
 `steward verify` and `steward doctor` consume.
 
 The companion file `sibling-pattern.json` (TBD; emit from this doc) is the
-machine-readable form. Until it lands, `verify` reads structured headings out
-of this file directly.
+machine-readable form. Until it lands, the checks `verify` runs are hard-coded
+in `steward/cli/_commands/verify.py`; this document remains the human-readable
+contract that those hard-coded checks are expected to honor.
 
 ## Required artifacts
 
@@ -27,30 +28,38 @@ of this file directly.
 
 ## Invariants (machine-checkable)
 
-These are the checks `steward verify` runs:
+The full set of invariants the AgentCulture sibling pattern asserts. The
+**Status** column reflects what is wired into `steward verify` *today*; items
+marked `(planned)` are described here as the contract `verify` is expected to
+grow into.
 
-- **portability** — no `/home/<user>/...` paths in tracked files; no
-  `~/.<dotfile>` config refs in committed `.md`/`.yaml`/`.toml`/`.json`/`.jsonc`
-  outside the carve-outs (`~/.claude/skills/.../scripts/`, `~/.culture/`).
+- **portability** *(implemented as `--check portability`)* — no
+  `/home/<user>/...` paths in tracked files; no `~/.<dotfile>` config refs in
+  committed `.md`/`.yaml`/`.toml`/`.json`/`.jsonc` outside the carve-outs
+  (`~/.claude/skills/.../scripts/`, `~/.culture/`).
   *Source:* `.claude/skills/pr-review/scripts/portability-lint.sh`.
-- **skills-convention** — every `.claude/skills/<name>/SKILL.md` has a sibling
-  `.claude/skills/<name>/scripts/` directory with at least one entry-point
-  (`*.sh`, `*.py`, or executable).
-- **frontmatter-name-matches-dir** — `SKILL.md`'s frontmatter `name` equals
-  the directory name.
-- **changelog-format** — `CHANGELOG.md` has at least one
+- **skills-convention** *(implemented as `--check skills-convention`)* —
+  every `.claude/skills/<name>/SKILL.md` has a sibling
+  `.claude/skills/<name>/scripts/` directory, **and** the SKILL.md frontmatter
+  `name` equals the directory name. (The "every skill has at least one
+  entry-point script" invariant is satisfied by the directory existing today
+  to keep the check noise-free; tightening to "directory has ≥1 file" is
+  *(planned)*.)
+- **changelog-format** *(planned)* — `CHANGELOG.md` has at least one
   `## [x.y.z] - YYYY-MM-DD` heading.
-- **lint-config-local** — `.markdownlint-cli2.yaml` exists at the repo root
-  (no reliance on per-user home configs).
+- **lint-config-local** *(planned)* — `.markdownlint-cli2.yaml` exists at the
+  repo root (no reliance on per-user home configs).
 
 ## Repairs (machine-fixable, run by `steward doctor`)
 
-A repair is included only if it is **deterministic and idempotent**. Where the
-right answer depends on judgement, `doctor` reports the gap and stops.
+`steward doctor` is **not yet implemented** (see `CLAUDE.md`'s Roadmap
+section); the table below is the contract it will honor when it lands. A
+repair is included only if it is **deterministic and idempotent**. Where the
+right answer depends on judgement, `doctor` will report the gap and stop.
 
-| Invariant violated | Repair |
-|--------------------|--------|
-| `.claude/skills/<name>/scripts/` missing | Create the empty directory + a `.gitkeep` file. |
+| Invariant violated | Planned repair |
+|--------------------|----------------|
+| `.claude/skills/<name>/scripts/` missing | Create the empty directory + a stub entry-point script. |
 | `.markdownlint-cli2.yaml` missing | Vendor steward's copy verbatim. |
 | `.claude/skills.local.yaml.example` missing | Vendor a minimal template documenting the `culture_server_yaml` and `sibling_projects` keys. |
 | `CHANGELOG.md` missing | Create a Keep-a-Changelog skeleton with one `## [Unreleased]` heading. |

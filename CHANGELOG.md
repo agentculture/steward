@@ -10,10 +10,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `steward verify <path>` — read-only diagnosis of a sibling repo against the
-  AgentCulture sibling pattern. Two checks today: `portability` (delegates to
-  the target's `portability-lint.sh --all`) and `skills-convention` (every
-  `SKILL.md` has a sibling `scripts/` directory and a matching frontmatter
-  `name`). `--json`, `--check <name>` (repeatable), exits 1 on any finding.
+  AgentCulture sibling pattern. Two checks today: `portability` (runs steward's
+  own vendored `portability-lint.sh --all` with `cwd=<target>`, so the target
+  doesn't need to vendor it and `verify` only ever executes a known-trusted
+  script) and `skills-convention` (every `SKILL.md` has a sibling `scripts/`
+  directory and a matching frontmatter `name`). Aggregates findings across all
+  selected checks; human-readable findings go to stderr, `--json` puts the
+  structured findings list on stdout. `--check <name>` repeatable. Exits 1 if
+  any finding was reported.
 - `docs/sibling-pattern.md` — single source of truth for the AgentCulture
   sibling pattern (12 required artifacts, 5 machine-checkable invariants,
   5 deterministic repairs). Consumed by `steward verify`; will be consumed
