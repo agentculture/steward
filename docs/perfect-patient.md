@@ -32,8 +32,8 @@ None yet.
 
 Skills present in 30–80% of agent repos.
 
-- `pr-review`
-- `run-tests`
+- `pr-review` — Full PR workflow for culture: branch, commit, push, create PR, wait for automated reviewers, fetch comments, fix or pushback, reply, resolve threads.
+- `run-tests` — Run pytest with parallel execution and coverage.
 
 ## Common `CLAUDE.md` sections
 

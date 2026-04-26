@@ -119,6 +119,7 @@ class Baseline:
     recommended_skills: set[str] = field(default_factory=set)
     required_claude_md_sections: set[str] = field(default_factory=set)
     recommended_claude_md_sections: set[str] = field(default_factory=set)
+    skill_descriptions: dict[str, str] = field(default_factory=dict)
     agent_count: int = 0
     repo_count: int = 0
 
@@ -244,6 +245,68 @@ def _agent_skills(agent: Agent) -> set[str]:
     return {p.name for p in skills_dir.iterdir() if p.is_dir()}
 
 
+def _read_skill_description(skill_md: Path) -> str:
+    """Pull a one-line summary out of a SKILL.md frontmatter `description:`.
+
+    Frontmatter is the leading ``---``-delimited YAML block. Many skills
+    use a folded scalar (``description: >\\n  ...``) so we hand the block
+    to ``yaml.safe_load`` rather than line-grepping. The returned string
+    is whitespace-collapsed and trimmed to the first sentence (or 200
+    chars, whichever is shorter) so the rendered baseline stays compact.
+    Returns ``""`` when the file is missing, has no frontmatter, or
+    can't be parsed — the caller renders a bare bullet in that case.
+    """
+    try:
+        text = skill_md.read_text()
+    except OSError:
+        return ""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return ""
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), -1)
+    if end == -1:
+        return ""
+    try:
+        meta = yaml.safe_load("\n".join(lines[1:end])) or {}
+    except yaml.YAMLError:
+        return ""
+    desc = meta.get("description") if isinstance(meta, dict) else None
+    if not isinstance(desc, str):
+        return ""
+    desc = " ".join(desc.split())
+    if not desc:
+        return ""
+    cut = desc.find(". ")
+    if 0 < cut < 200:
+        desc = desc[: cut + 1]
+    elif len(desc) > 200:
+        desc = desc[:197].rstrip() + "…"
+    return desc
+
+
+def _corpus_skill_descriptions(agents: list[Agent]) -> dict[str, str]:
+    """Best one-liner per skill name, sourced from SKILL.md frontmatter.
+
+    Walks each repo (deterministic by name), takes the first non-empty
+    description we encounter for each skill. "First-wins" rather than
+    "longest-wins" so the output is stable across re-runs even when a
+    downstream copy of a skill has tweaked its description.
+    """
+    out: dict[str, str] = {}
+    repos = sorted({a.repo_path for a in agents}, key=lambda p: p.name)
+    for repo in repos:
+        skills_dir = repo / ".claude" / "skills"
+        if not skills_dir.is_dir():
+            continue
+        for skill_dir in sorted(skills_dir.iterdir(), key=lambda p: p.name):
+            if not skill_dir.is_dir() or skill_dir.name in out:
+                continue
+            desc = _read_skill_description(skill_dir / "SKILL.md")
+            if desc:
+                out[skill_dir.name] = desc
+    return out
+
+
 def _agent_claude_md_sections(agent: Agent) -> set[str]:
     """Extract level-2 (`## ...`) heading titles from the agent's CLAUDE.md.
 
@@ -301,6 +364,7 @@ def synthesize_baseline(agents: list[Agent]) -> Baseline:
         recommended_skills=rec_skills,
         required_claude_md_sections=req_sec,
         recommended_claude_md_sections=rec_sec,
+        skill_descriptions=_corpus_skill_descriptions(agents),
         agent_count=len(agents),
         repo_count=len(repos),
     )
@@ -342,7 +406,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Skills present in ≥80% of agent repos.",
         "",
     ]
-    lines.extend(_bullets(baseline.required_skills))
+    lines.extend(_skill_bullets(baseline.required_skills, baseline.skill_descriptions))
     lines += [
         "",
         "## Recommended skills",
@@ -350,7 +414,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Skills present in 30–80% of agent repos.",
         "",
     ]
-    lines.extend(_bullets(baseline.recommended_skills))
+    lines.extend(_skill_bullets(baseline.recommended_skills, baseline.skill_descriptions))
     lines += [
         "",
         "## Common `CLAUDE.md` sections",
@@ -375,6 +439,17 @@ def _bullets(items: set[str]) -> list[str]:
     if not items:
         return [NONE_PLACEHOLDER]
     return [f"- `{item}`" for item in sorted(items)]
+
+
+def _skill_bullets(items: set[str], descriptions: dict[str, str]) -> list[str]:
+    """Render skill bullets with frontmatter-sourced one-liners when available."""
+    if not items:
+        return [NONE_PLACEHOLDER]
+    out: list[str] = []
+    for name in sorted(items):
+        desc = descriptions.get(name, "")
+        out.append(f"- `{name}` — {desc}" if desc else f"- `{name}`")
+    return out
 
 
 def synthesize_perfect_patient(agents: list[Agent]) -> str:

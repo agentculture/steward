@@ -203,6 +203,41 @@ def test_render_perfect_patient_has_expected_sections(tmp_path: Path) -> None:
     assert "Corpus stats" in body
 
 
+def test_skill_bullets_carry_frontmatter_descriptions(tmp_path: Path) -> None:
+    """Skills in the rendered baseline get a one-liner pulled from
+    their SKILL.md frontmatter `description:`. First-encountered repo
+    wins so the output is stable across runs."""
+    repo = tmp_path / "alpha"
+    repo.mkdir()
+    (repo / "culture.yaml").write_text(yaml.safe_dump({"agents": [{"suffix": "a", "backend": "claude"}]}))
+    (repo / ".claude" / "skills" / "run-tests" / "scripts").mkdir(parents=True)
+    (repo / ".claude" / "skills" / "run-tests" / "SKILL.md").write_text(
+        "---\nname: run-tests\n"
+        "description: Run pytest with parallel execution and coverage. "
+        "Use when running tests.\n---\n"
+    )
+    (repo / ".claude" / "skills" / "no-meta" / "scripts").mkdir(parents=True)
+    (repo / ".claude" / "skills" / "no-meta" / "SKILL.md").write_text("# no frontmatter\n")
+
+    agents, _errors = _corpus.discover_agents(tmp_path)
+    baseline = _corpus.synthesize_baseline(agents)
+    # 1-of-1 repo carries each skill, so both are required.
+    assert {"run-tests", "no-meta"} <= baseline.required_skills
+    # Description is collected for the skill that has frontmatter and trimmed
+    # to the first sentence (the trailing "Use when..." is dropped).
+    assert baseline.skill_descriptions["run-tests"].startswith(
+        "Run pytest with parallel execution and coverage."
+    )
+    assert "Use when" not in baseline.skill_descriptions["run-tests"]
+    # Skills without a parseable description are absent from the dict, not
+    # mapped to an empty string — render falls back to a bare bullet.
+    assert "no-meta" not in baseline.skill_descriptions
+
+    body = _corpus.render_perfect_patient(baseline)
+    assert "- `run-tests` — Run pytest with parallel execution and coverage." in body
+    assert "- `no-meta`\n" in body
+
+
 def test_write_repo_report_writes_marked_file(tmp_path: Path) -> None:
     repo = tmp_path / "alpha"
     repo.mkdir()
