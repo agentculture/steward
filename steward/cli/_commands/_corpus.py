@@ -370,6 +370,20 @@ def synthesize_baseline(agents: list[Agent]) -> Baseline:
     )
 
 
+MANUAL_RATCHET_START = "<!-- steward:manual-ratchet:start -->"
+MANUAL_RATCHET_END = "<!-- steward:manual-ratchet:end -->"
+_DEFAULT_MANUAL_RATCHET_BODY = (
+    "\n"
+    "<!--\n"
+    "  Anything between these two markers survives regeneration by\n"
+    "  `steward doctor --scope siblings`. Add hand-curated skill tiers,\n"
+    "  conventions, or extra guidance here when you want to ratchet the bar\n"
+    "  above what the corpus tally produces.\n"
+    "-->\n"
+    "\n"
+)
+
+
 def render_perfect_patient(baseline: Baseline) -> str:
     """Render a Baseline into the markdown body of perfect-patient.md."""
     today = date.today().isoformat()
@@ -380,10 +394,13 @@ def render_perfect_patient(baseline: Baseline) -> str:
         f"> Synthesized from {baseline.agent_count} agents across "
         + f"{baseline.repo_count} repos.",
         ">",
-        "> The baseline is descriptive, not prescriptive: it describes what",
-        "> a typical healthy agent looks like in the current corpus, so",
-        "> drift can be spotted. Edit by hand only if you intend to ratchet",
-        "> the bar — `steward doctor --scope siblings` overwrites this file.",
+        "> The corpus-derived sections (`culture.yaml` fields, common skills,",
+        "> `CLAUDE.md` sections, corpus stats) are descriptive: they describe",
+        "> what a typical healthy agent looks like *today*, so drift can be",
+        "> spotted. Hand-edits to those sections are overwritten on the next",
+        "> regeneration. To ratchet the bar above the corpus tally, edit the",
+        "> manual-ratchet section below — content between the marker comments",
+        "> is preserved across regenerations.",
         "",
         "## Required `culture.yaml` fields",
         "",
@@ -416,6 +433,15 @@ def render_perfect_patient(baseline: Baseline) -> str:
     ]
     lines.extend(_skill_bullets(baseline.recommended_skills, baseline.skill_descriptions))
     lines += [
+        "",
+        "## Manual ratchet",
+        "",
+        "Hand-curated additions that survive regeneration. Edit between the",
+        "marker comments below.",
+        "",
+        MANUAL_RATCHET_START,
+        _DEFAULT_MANUAL_RATCHET_BODY.rstrip("\n"),
+        MANUAL_RATCHET_END,
         "",
         "## Common `CLAUDE.md` sections",
         "",
@@ -455,6 +481,49 @@ def _skill_bullets(items: set[str], descriptions: dict[str, str]) -> list[str]:
 def synthesize_perfect_patient(agents: list[Agent]) -> str:
     """Convenience: discover → render in one call (used by doctor)."""
     return render_perfect_patient(synthesize_baseline(agents))
+
+
+def merge_manual_ratchet(rendered: str, existing: str | None) -> str:
+    """Splice the manual-ratchet block from ``existing`` into ``rendered``.
+
+    The corpus-derived sections of perfect-patient.md are descriptive and
+    regenerated wholesale. The block between
+    ``<!-- steward:manual-ratchet:start -->`` and
+    ``<!-- steward:manual-ratchet:end -->`` is hand-curated and must be
+    preserved across regenerations.
+
+    If ``existing`` is missing or has no marker pair, return ``rendered``
+    unchanged (the rendered output already carries the default empty
+    block, so first-run users see the markers and know where to edit).
+    If both files have markers, the body from ``existing`` wins.
+    """
+    if existing is None:
+        return rendered
+    body = _extract_manual_ratchet_body(existing)
+    if body is None:
+        return rendered
+    if MANUAL_RATCHET_START not in rendered or MANUAL_RATCHET_END not in rendered:
+        return rendered
+    pre = rendered.split(MANUAL_RATCHET_START, 1)[0]
+    post = rendered.split(MANUAL_RATCHET_END, 1)[1]
+    return f"{pre}{MANUAL_RATCHET_START}{body}{MANUAL_RATCHET_END}{post}"
+
+
+def _extract_manual_ratchet_body(text: str) -> str | None:
+    """Return the substring between the two markers in ``text``, or None.
+
+    The body is whatever is between the markers verbatim — including
+    surrounding newlines — so round-tripping ``existing → merge → write``
+    is byte-stable when no corpus-derived section changed.
+    """
+    start = text.find(MANUAL_RATCHET_START)
+    if start == -1:
+        return None
+    body_start = start + len(MANUAL_RATCHET_START)
+    end = text.find(MANUAL_RATCHET_END, body_start)
+    if end == -1:
+        return None
+    return text[body_start:end]
 
 
 def score_culture_yaml_shape(agent: Agent, baseline: Baseline) -> list[AgentFinding]:

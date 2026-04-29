@@ -99,6 +99,25 @@ Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
 `pr-review`, etc.) are recorded in `docs/skill-sources.md` so `doctor` can
 vendor deterministically.
 
+`docs/perfect-patient.md` is two layers: corpus-derived sections regenerated
+by `steward doctor --scope siblings`, and a manual-ratchet block bounded by
+`<!-- steward:manual-ratchet:start -->` / `:end -->` markers that survives
+regeneration. Hand-curated tier lists (Recommended / Optional / Conditional
+skills, etc.) belong inside the markers; anything outside them is descriptive
+and gets overwritten. The merge logic lives in
+`steward/cli/_commands/_corpus.py::merge_manual_ratchet`.
+
+## Quality gates
+
+Local checks (run before pushing — most are also CI jobs):
+
+- `uv run pytest -n auto -v` — Python tests.
+- `uv run steward doctor .` — self-alignment check (`portability` + `skills-convention`).
+- `bash .claude/skills/pr-review/scripts/portability-lint.sh` — diff-only path-leak / dotfile-ref scan.
+- `bats tests/shell/` — behavioral coverage for the shell scripts under `.claude/skills/*/scripts/`.
+- `shellcheck --severity=warning .claude/skills/*/scripts/*.sh` — static check for the same.
+- `uvx pre-commit run --all-files` — markdownlint + portability-lint as a pre-commit hook (install once with `uvx pre-commit install`).
+
 ## Working with Culture from here
 
 Steward will need to read or write Culture artifacts (agent definitions, server configs, mesh links). Useful entry points:

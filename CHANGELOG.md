@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-29
+
+### Added
+
+- bats test suite (51 cases) under tests/shell/ covering arity contracts of the 7 vendored skill scripts + portability-lint
+- pre-commit config (.pre-commit-config.yaml) wiring markdownlint-cli2 + portability-lint
+- CI jobs: doctor (steward eats own dogfood), shellcheck (severity=warning), bats
+- Marker-preserved manual-ratchet section in docs/perfect-patient.md (steward.cli._commands._corpus.merge_manual_ratchet)
+- CLAUDE.md Quality gates section listing all local checks; README.md Skill supplier role paragraph
+
+### Changed
+
+- portability-lint.sh now fails when working tree has untracked files but the diff vs HEAD is empty (caught a real near-miss in PR #8)
+- docs/perfect-patient.md restructured: corpus-derived header + Required/Recommended/Common sections, then a manual-ratchet block (preserved across regeneration) holding the curated Recommended/Optional/Conditional skill tiers
+
+### Fixed
+
+- pr-status.sh: removed unused SONARQUBE_ISSUE variable (shellcheck SC2034)
+- portability-lint.sh: silenced false-positive shellcheck SC2088 on intentional literal-tilde regex patterns
+
 ## [0.4.0] - 2026-04-29
 
 ### Added

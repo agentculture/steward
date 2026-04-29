@@ -56,6 +56,52 @@ jobs:
           npm install -g markdownlint-cli2@0.21.0
           markdownlint-cli2 "**/*.md" "#node_modules" "#.local"
 
+  doctor:
+    # Eat our own dogfood — steward's whole job is keeping siblings aligned,
+    # so it has to pass its own alignment check.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: astral-sh/setup-uv@38f3f104447c67c051c4a08e39b64a148898af3a # v4
+
+      - run: uv python install 3.12
+
+      - run: uv sync
+
+      - name: steward doctor (self)
+        run: uv run steward doctor .
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: shellcheck (warning level)
+        run: shellcheck --severity=warning .claude/skills/*/scripts/*.sh
+
+  bats:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0  # portability-lint bats tests need full history
+
+      - name: install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+
+      - name: bats tests/shell
+        run: bats tests/shell/
+
   version-check:
     # Only run on PR events. On push to main after a merged PR, the
     # comparison would always fail (PR_VERSION == MAIN_VERSION because HEAD

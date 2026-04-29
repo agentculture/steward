@@ -292,3 +292,90 @@ def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
     path, status = _corpus.write_repo_report(repo, body)
     assert status == "skipped-unmanaged"
     assert "Hand-written notes" in path.read_text()
+
+
+# --- merge_manual_ratchet --------------------------------------------------
+
+
+def test_merge_manual_ratchet_no_existing_returns_rendered_unchanged() -> None:
+    rendered = (
+        f"# Title\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
+    )
+    assert _corpus.merge_manual_ratchet(rendered, None) == rendered
+
+
+def test_merge_manual_ratchet_existing_with_no_markers_returns_rendered() -> None:
+    rendered = (
+        f"# v2\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
+    )
+    existing = "# v1 hand-edited but no markers\n\nNothing to splice.\n"
+    assert _corpus.merge_manual_ratchet(rendered, existing) == rendered
+
+
+def test_merge_manual_ratchet_splices_body_from_existing_into_rendered() -> None:
+    rendered = (
+        "# Title\n## Auto section A: NEW value\n\n"
+        f"{_corpus.MANUAL_RATCHET_START}\nempty default\n{_corpus.MANUAL_RATCHET_END}\n"
+        "## Auto section B\n"
+    )
+    existing = (
+        "# Title\n## Auto section A: OLD value\n\n"
+        f"{_corpus.MANUAL_RATCHET_START}\n"
+        "Hand-curated tier list:\n- foo\n- bar\n"
+        f"{_corpus.MANUAL_RATCHET_END}\n"
+        "## Auto section B\n"
+    )
+    out = _corpus.merge_manual_ratchet(rendered, existing)
+    # The auto section A reflects the new render.
+    assert "NEW value" in out
+    assert "OLD value" not in out
+    # The hand-curated body is preserved verbatim between markers.
+    assert "Hand-curated tier list:\n- foo\n- bar" in out
+    # The default empty body from the rendered template is replaced.
+    assert "empty default" not in out
+
+
+def test_merge_manual_ratchet_round_trip_idempotent() -> None:
+    """Re-running the merge against the merged output must be a no-op."""
+    rendered = (
+        f"# T\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
+    )
+    existing = (
+        f"# T\n{_corpus.MANUAL_RATCHET_START}\nuser body\n{_corpus.MANUAL_RATCHET_END}\n"
+    )
+    once = _corpus.merge_manual_ratchet(rendered, existing)
+    twice = _corpus.merge_manual_ratchet(rendered, once)
+    assert once == twice
+
+
+def test_merge_manual_ratchet_preserves_blank_line_inside_body() -> None:
+    rendered = (
+        f"#\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
+    )
+    existing = (
+        f"#\n{_corpus.MANUAL_RATCHET_START}\n"
+        "first line\n\nsecond line after blank\n"
+        f"{_corpus.MANUAL_RATCHET_END}\n"
+    )
+    out = _corpus.merge_manual_ratchet(rendered, existing)
+    assert "first line\n\nsecond line after blank" in out
+
+
+def test_render_perfect_patient_emits_markers() -> None:
+    baseline = _corpus.Baseline(
+        agent_count=0,
+        repo_count=0,
+        required_yaml_keys=set(),
+        recommended_yaml_keys=set(),
+        required_skills=set(),
+        recommended_skills=set(),
+        required_claude_md_sections=set(),
+        skill_descriptions={},
+    )
+    rendered = _corpus.render_perfect_patient(baseline)
+    assert _corpus.MANUAL_RATCHET_START in rendered
+    assert _corpus.MANUAL_RATCHET_END in rendered
+    # Markers must appear in the right order.
+    assert rendered.index(_corpus.MANUAL_RATCHET_START) < rendered.index(
+        _corpus.MANUAL_RATCHET_END
+    )

@@ -330,7 +330,9 @@ def _resolve_perfect_patient_path(args: argparse.Namespace, steward_root: Path) 
 
 def _refresh_perfect_patient(baseline: _corpus.Baseline, pp_path: Path) -> None:
     pp_path.parent.mkdir(parents=True, exist_ok=True)
-    pp_path.write_text(_corpus.render_perfect_patient(baseline))
+    rendered = _corpus.render_perfect_patient(baseline)
+    existing = pp_path.read_text() if pp_path.is_file() else None
+    pp_path.write_text(_corpus.merge_manual_ratchet(rendered, existing))
 
 
 def _run_repo_checks(repo_path: Path, selected_repo_checks: list[str]) -> list[Finding]:

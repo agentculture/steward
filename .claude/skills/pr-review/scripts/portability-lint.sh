@@ -18,7 +18,30 @@ case "$mode" in
     *) echo "Usage: $(basename "$0") [--all]" >&2; exit 2 ;;
 esac
 
-[ -z "$files" ] && { echo "(no files to check)"; exit 0; }
+if [ -z "$files" ]; then
+    if [ "$mode" = "--all" ]; then
+        # `--all` against a repo with no tracked files is a real "nothing to do".
+        echo "(no tracked files to check)"
+        exit 0
+    fi
+    # Default mode found no diff against HEAD. That can mean two things:
+    #   1. The contributor genuinely has nothing staged or unstaged — fine.
+    #   2. The work is in *untracked* files (typical: a new skill, untouched by
+    #      `git diff` until staged). Untracked files are exactly where path
+    #      leaks tend to ship from. Don't quietly exit 0 in that case.
+    untracked=$(git ls-files --others --exclude-standard)
+    if [ -n "$untracked" ]; then
+        echo "❌ portability-lint: working tree has untracked files but the diff" >&2
+        echo "   against HEAD is empty. Stage them (or run with --all) before" >&2
+        echo "   relying on this check." >&2
+        echo "" >&2
+        echo "   Untracked:" >&2
+        echo "$untracked" | sed 's/^/     /' >&2
+        exit 1
+    fi
+    echo "(no files to check)"
+    exit 0
+fi
 
 # ----- Check 1: hard-coded /home/<user>/... paths -----
 hits1=$(echo "$files" | xargs -r grep -nE '/home/[a-z][a-z0-9_-]+/' 2>/dev/null || true)
@@ -29,6 +52,7 @@ hits1=$(echo "$files" | xargs -r grep -nE '/home/[a-z][a-z0-9_-]+/' 2>/dev/null 
 #   - ~/.culture/                     Culture mesh data this skill is supposed to read
 md_yaml=$(echo "$files" | grep -E '\.(md|ya?ml|toml|json|jsonc)$' || true)
 if [ -n "$md_yaml" ]; then
+    # shellcheck disable=SC2088  # ~ is a literal in these grep patterns, not a path
     hits2=$(echo "$md_yaml" | xargs -r grep -nE '~/\.[A-Za-z]' 2>/dev/null \
         | grep -vE '~/\.claude/skills/[^[:space:]"]+/scripts/' \
         | grep -vE '~/\.culture/' \

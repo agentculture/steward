@@ -59,6 +59,18 @@ the auto-generated corpus baseline.
 See [`CLAUDE.md`](CLAUDE.md) for project-shape, build/test/publish details, and
 the skills convention.
 
+## Skill supplier role
+
+Steward is the canonical home of a set of portable Claude Code skills that
+every healthy AgentCulture sibling is expected to vendor. The full list with
+upstream pointers lives in [`docs/skill-sources.md`](docs/skill-sources.md).
+At time of writing the steward-owned set is `agent-config`, `discord-notify`,
+`doc-test-alignment`, `gh-issues`, `jekyll-test`, `notebooklm`,
+`pr-review`, `pypi-maintainer`, `run-tests`, `sonarclaude`, `version-bump`.
+Sibling repos copy the directories they want into their own
+`.claude/skills/` and own the copy from then on (cite, don't import). The
+planned `steward doctor --apply` will automate that vendoring step.
+
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
