@@ -13,7 +13,14 @@ NUMBERS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo) REPO_FLAG="--repo $2"; shift 2 ;;
+    --repo)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "Error: --repo requires a value (OWNER/REPO)" >&2
+        echo "Usage: gh-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]" >&2
+        exit 1
+      fi
+      REPO_FLAG="--repo $2"
+      shift 2 ;;
     *-*)  # range like 191-197
       IFS='-' read -r start end <<< "$1"
       for ((i=start; i<=end; i++)); do NUMBERS+=("$i"); done

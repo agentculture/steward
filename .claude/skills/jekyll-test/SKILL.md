@@ -30,27 +30,28 @@ bash .claude/skills/jekyll-test/scripts/test-site.sh /path/to/jekyll-site
 
 ## What the script checks
 
-1. **Locate root** — finds the nearest `_config.yml` (cwd, then walking up).
-   Exits with a clear error if no Jekyll project is detected.
-2. **Build** — runs `bundle install --quiet` then `bundle exec jekyll build`.
-   A non-zero build is the only hard-fail; all later checks are reported
-   but do not change the exit code.
-3. **Custom colors** — if `_config.yml` declares `color_scheme: <name>` and
-   `_sass/color_schemes/<name>.scss` exists, extracts hex values from that
-   SCSS file and verifies each appears in the built `_site/assets/css/*`.
-4. **Permalinks** — finds every page with `permalink:` front matter and
-   confirms the corresponding `<permalink>/index.html` was generated.
-5. **just-the-docs nav** — for sites using `just-the-docs`, validates that
-   every `parent:` value in front matter matches a real parent page's
-   `title:`, and flags parents that have no children.
-6. **Includes** — checks that `_includes/footer_custom.html` and
-   `_includes/head_custom.html` (if they exist) are spliced into
-   `_site/index.html`.
+The script walks up to find `_config.yml`, runs `bundle install --quiet`
+and `bundle exec jekyll build` (the only hard-fail step), then reports
+non-fatal validation findings:
 
-The output is a single summary block matching the original SKILL.md prose.
+- Build status and elapsed time.
+- For `color_scheme: <name>` declarations, every hex from
+  `_sass/color_schemes/<name>.scss` is grep'd for in the built
+  `_site/assets/css/*` — missing colors are listed.
+- Every `permalink:` in front matter is checked against the generated
+  `<permalink>/index.html` — missing pages are listed.
+- For `just-the-docs` sites, every `parent:` value is matched against
+  parent pages' `title:` — orphans (children whose parent is not found)
+  are listed. Parent counts and child counts are printed.
+- `_includes/footer_custom.html` and `_includes/head_custom.html`, if
+  they exist, are checked for inclusion in `_site/index.html`.
+
+The output is a single summary block plus per-category failure detail.
 
 ## Requirements
 
 - `bundle` (Bundler) on PATH.
 - `ruby` on PATH (whatever the site's `Gemfile` requires).
+- `python3` on PATH (used to parse `_config.yml`; PyYAML preferred,
+  regex fallback if it is not installed).
 - A Jekyll project (must contain `_config.yml`).

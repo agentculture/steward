@@ -10,6 +10,14 @@ description: >
 
 Query SonarCloud projects for quality gate status, issues, metrics, and security hotspots.
 
+## Prerequisites
+
+The script requires the following tools on `PATH`:
+
+- `bash`
+- `curl` — talks to the SonarCloud REST API
+- `jq` — parses responses and URL-encodes accept comments
+
 ## Environment
 
 Requires `SONAR_TOKEN` environment variable. Set the project key per-repo via

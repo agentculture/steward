@@ -17,18 +17,27 @@ COMMAND=""
 ISSUE_KEY=""
 ACCEPT_COMMENT=""
 
+require_value() {
+  local flag="$1" remaining="$2"
+  if [[ "$remaining" -lt 2 ]]; then
+    echo "Error: $flag requires a value" >&2
+    echo "Run sonar.sh --help for usage." >&2
+    exit 1
+  fi
+}
+
 # --- Parse args ---
 while [[ $# -gt 0 ]]; do
   case "$1" in
     status|issues|metrics|hotspots|accept)
       COMMAND="$1"; shift ;;
-    --project|-p)   PROJECT="$2";  shift 2 ;;
-    --severity|-s)  SEVERITY="$2"; shift 2 ;;
-    --type|-t)      TYPE="$2";     shift 2 ;;
-    --limit|-l)     LIMIT="$2";    shift 2 ;;
-    --raw|-r)       RAW=true;      shift ;;
-    --issue|-i)     ISSUE_KEY="$2"; shift 2 ;;
-    --comment|-c)   ACCEPT_COMMENT="$2"; shift 2 ;;
+    --project|-p)   require_value "$1" "$#"; PROJECT="$2";        shift 2 ;;
+    --severity|-s)  require_value "$1" "$#"; SEVERITY="$2";       shift 2 ;;
+    --type|-t)      require_value "$1" "$#"; TYPE="$2";           shift 2 ;;
+    --limit|-l)     require_value "$1" "$#"; LIMIT="$2";          shift 2 ;;
+    --raw|-r)       RAW=true;                                     shift ;;
+    --issue|-i)     require_value "$1" "$#"; ISSUE_KEY="$2";      shift 2 ;;
+    --comment|-c)   require_value "$1" "$#"; ACCEPT_COMMENT="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: sonar.sh <command> [options]"
       echo ""
@@ -223,11 +232,18 @@ cmd_accept() {
   status=$(echo "$transition_resp" | jq -r '.issue.issueStatus // "UNKNOWN"')
 
   # 2. Attach rationale comment (URL-encode via jq).
-  local encoded
+  local encoded comment_resp comment_status
   encoded=$(jq -rn --arg s "$ACCEPT_COMMENT" '$s|@uri')
-  curl -s -H "Authorization: Bearer $SONAR_TOKEN" \
+  comment_resp=$(curl -sS -w $'\n%{http_code}' -H "Authorization: Bearer $SONAR_TOKEN" \
     -X POST "${BASE_URL}/api/issues/add_comment" \
-    -d "issue=${ISSUE_KEY}&text=${encoded}" > /dev/null
+    -d "issue=${ISSUE_KEY}&text=${encoded}")
+  comment_status=$(printf '%s\n' "$comment_resp" | tail -n 1)
+  if [[ "$comment_status" -lt 200 || "$comment_status" -ge 300 ]]; then
+    echo "Error: failed to attach rationale comment (HTTP $comment_status)" >&2
+    echo "Response body:" >&2
+    printf '%s\n' "$comment_resp" | sed '$d' >&2
+    exit 1
+  fi
 
   if [[ "$RAW" == "true" ]]; then
     echo "$transition_resp" | jq .

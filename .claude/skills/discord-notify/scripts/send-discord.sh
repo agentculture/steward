@@ -32,13 +32,22 @@ title_for_type() {
 }
 
 # --- Parse args ---
+require_value() {
+  local flag="$1" remaining="$2"
+  if [[ "$remaining" -lt 2 ]]; then
+    echo "Error: $flag requires a value" >&2
+    echo "Usage: send-discord.sh [--type info|status|completion|error] [--title TITLE] [--username NAME] MESSAGE" >&2
+    exit 1
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --type|-t)    TYPE="$2";     shift 2 ;;
-    --title|-T)   TITLE="$2";   shift 2 ;;
-    --username|-u) USERNAME="$2"; shift 2 ;;
-    -*)           echo "Unknown option: $1" >&2; exit 1 ;;
-    *)            MESSAGE="$1";  shift ;;
+    --type|-t)     require_value "$1" "$#"; TYPE="$2";     shift 2 ;;
+    --title|-T)    require_value "$1" "$#"; TITLE="$2";    shift 2 ;;
+    --username|-u) require_value "$1" "$#"; USERNAME="$2"; shift 2 ;;
+    -*)            echo "Unknown option: $1" >&2; exit 1 ;;
+    *)             MESSAGE="$1";  shift ;;
   esac
 done
 

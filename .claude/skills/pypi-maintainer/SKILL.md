@@ -43,6 +43,14 @@ bash .claude/skills/pypi-maintainer/scripts/switch-source.sh <package> local
 bash .claude/skills/pypi-maintainer/scripts/switch-source.sh <package> local --path ../<package>
 ```
 
+## Prerequisites
+
+The script requires the following tools on `PATH`:
+
+- `bash`
+- `uv` — the script delegates to `uv tool install` and `uv tool list`
+  (or `uv pip install` for `local`).
+
 ## Why TestPyPI needs special flags
 
 When a package is published to **both** PyPI and TestPyPI, `uv tool install`
@@ -51,12 +59,11 @@ The script passes `--index-strategy unsafe-best-match` so uv compares the
 two index sets and picks the highest version, plus `--prerelease=allow`
 because TestPyPI builds carry dev suffixes (e.g. `0.4.0.dev42`).
 
-## Workflow
+## After running
 
-1. Run the appropriate command for the source you want.
-2. The script prints the resolved version after install.
-3. Cross-check that version against the expected one (PR run number, local
-   `pyproject.toml`, etc.) before continuing.
+The script prints the resolved version once install completes — cross-check
+that against the expected version (PR run number, local `pyproject.toml`)
+before continuing.
 
 ## Arguments
 

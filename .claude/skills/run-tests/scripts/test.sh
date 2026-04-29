@@ -8,8 +8,10 @@
 #   --ci              Mimic full CI invocation (-n auto + coverage + xml)
 #   --quick, -q       Quick mode: no coverage, quiet output
 #
-# Coverage source is read from pyproject.toml's [tool.coverage.run] section,
-# so this script is portable across siblings without modification.
+# When --coverage or --ci is passed, this script invokes pytest-cov with --cov
+# (no module spec). pytest-cov / coverage.py then resolve the source set via
+# the standard config lookup — typically [tool.coverage.run] source in
+# pyproject.toml — so the same script works in any sibling without edits.
 #
 # Extra args are passed through to pytest.
 

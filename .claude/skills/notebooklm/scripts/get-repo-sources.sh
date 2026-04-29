@@ -8,16 +8,27 @@ PLAIN=false
 BRANCH=""
 
 # --- Parse args ---
+usage() {
+  echo "Usage: get-repo-sources.sh [--all] [--plain] [--branch NAME]"
+  echo "  --all      Include plans, specs, and changelogs"
+  echo "  --plain    Output plain URLs only (no headers)"
+  echo "  --branch   Override branch (default: auto-detect)"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --all)       INCLUDE_ALL=true; shift ;;
     --plain)     PLAIN=true; shift ;;
-    --branch)    BRANCH="$2"; shift 2 ;;
+    --branch)
+      if [[ $# -lt 2 || -z "$2" ]]; then
+        echo "Error: --branch requires a value" >&2
+        usage >&2
+        exit 1
+      fi
+      BRANCH="$2"
+      shift 2 ;;
     -h|--help)
-      echo "Usage: get-repo-sources.sh [--all] [--plain] [--branch NAME]"
-      echo "  --all      Include plans, specs, and changelogs"
-      echo "  --plain    Output plain URLs only (no headers)"
-      echo "  --branch   Override branch (default: auto-detect)"
+      usage
       exit 0
       ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -42,15 +53,28 @@ if [[ "$GITHUB_URL" == git@github.com:* ]]; then
   GITHUB_URL="https://github.com/${GITHUB_URL#git@github.com:}"
 fi
 
-# --- Detect branch ---
+# --- Detect branch (handle detached HEAD) ---
 if [[ -z "$BRANCH" ]]; then
-  BRANCH="$(git branch --show-current 2>/dev/null || echo "main")"
+  BRANCH="$(git branch --show-current 2>/dev/null || true)"
+fi
+if [[ -z "$BRANCH" ]]; then
+  echo "Error: cannot determine the current branch (detached HEAD?)." >&2
+  echo "Hint: pass --branch <name> with a branch that exists on origin." >&2
+  exit 1
+fi
+
+# --- Verify the remote ref exists locally ---
+REMOTE_REF="origin/${BRANCH}"
+if ! git show-ref --verify --quiet "refs/remotes/${REMOTE_REF}"; then
+  echo "Error: remote ref '${REMOTE_REF}' is not available locally." >&2
+  echo "Hint: run 'git fetch origin ${BRANCH}', push the branch first, or pass --branch with an existing remote branch name." >&2
+  exit 1
 fi
 
 BASE_URL="${GITHUB_URL}/blob/${BRANCH}"
 
 # --- Collect all .md files from remote branch (only files that exist on GitHub) ---
-ALL_FILES=$(git ls-tree -r --name-only "origin/${BRANCH}" 2>/dev/null \
+ALL_FILES=$(git ls-tree -r --name-only "${REMOTE_REF}" \
   | grep '\.md$' \
   | grep -v -E '^(\.github/|\.claude/|\.pytest_cache/|node_modules/|\.venv/|__pycache__/|\.mypy_cache/)' \
   | sort)
@@ -71,11 +95,12 @@ filter_file() {
 }
 
 FILTERED=()
-for f in $ALL_FILES; do
+while IFS= read -r f; do
+  [[ -z "$f" ]] && continue
   if filter_file "$f"; then
     FILTERED+=("$f")
   fi
-done
+done <<< "$ALL_FILES"
 
 if [[ ${#FILTERED[@]} -eq 0 ]]; then
   echo "No documentation files found." >&2

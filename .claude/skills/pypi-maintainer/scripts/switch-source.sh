@@ -30,11 +30,20 @@ EOF
 }
 
 # --- Parse args ---
+require_value() {
+  local flag="$1" remaining="$2"
+  if [[ "$remaining" -lt 2 ]]; then
+    echo "Error: $flag requires a value" >&2
+    usage
+    exit 1
+  fi
+}
+
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version) VERSION="$2"; shift 2 ;;
-    --path)    LOCAL_PATH="$2"; shift 2 ;;
+    --version) require_value "$1" "$#"; VERSION="$2"; shift 2 ;;
+    --path)    require_value "$1" "$#"; LOCAL_PATH="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     --*)       echo "Unknown option: $1" >&2; usage; exit 1 ;;
     *)         POSITIONAL+=("$1"); shift ;;
@@ -90,4 +99,4 @@ esac
 # --- Report what is now active ---
 echo
 echo "Installed tools matching '$PACKAGE':"
-uv tool list 2>/dev/null | awk -v pkg="$PACKAGE" 'BEGIN{IGNORECASE=1} $1 ~ pkg {print "  " $0}'
+uv tool list 2>/dev/null | awk -v pkg="$PACKAGE" 'tolower($1) == tolower(pkg) {print "  " $0}'

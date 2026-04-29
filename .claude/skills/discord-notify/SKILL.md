@@ -16,6 +16,14 @@ Send a message to a Discord channel using a webhook embed.
 - An error occurs that the user should know about
 - The user explicitly asks to be notified
 
+## Prerequisites
+
+The script requires the following tools on `PATH`:
+
+- `bash`
+- `curl` — sends the webhook POST
+- `jq` — builds the JSON payload safely
+
 ## Environment
 
 Set `DISCORD_WEBHOOK_URL` to a Discord webhook URL before use.

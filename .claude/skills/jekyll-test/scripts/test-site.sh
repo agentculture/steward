@@ -36,6 +36,11 @@ cd "$SITE_ROOT"
 echo "Site root: $SITE_ROOT"
 
 # --- Read selected _config.yml keys via Python (PyYAML if available, else regex) ---
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "Error: python3 is required to parse _config.yml but was not found on PATH" >&2
+  exit 1
+fi
+
 read_config() {
   python3 - <<'PY' 2>/dev/null
 import os, sys, re
