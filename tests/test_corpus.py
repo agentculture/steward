@@ -298,16 +298,12 @@ def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
 
 
 def test_merge_manual_ratchet_no_existing_returns_rendered_unchanged() -> None:
-    rendered = (
-        f"# Title\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    )
+    rendered = f"# Title\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
     assert _corpus.merge_manual_ratchet(rendered, None) == rendered
 
 
 def test_merge_manual_ratchet_existing_with_no_markers_returns_rendered() -> None:
-    rendered = (
-        f"# v2\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    )
+    rendered = f"# v2\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
     existing = "# v1 hand-edited but no markers\n\nNothing to splice.\n"
     assert _corpus.merge_manual_ratchet(rendered, existing) == rendered
 
@@ -337,21 +333,15 @@ def test_merge_manual_ratchet_splices_body_from_existing_into_rendered() -> None
 
 def test_merge_manual_ratchet_round_trip_idempotent() -> None:
     """Re-running the merge against the merged output must be a no-op."""
-    rendered = (
-        f"# T\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    )
-    existing = (
-        f"# T\n{_corpus.MANUAL_RATCHET_START}\nuser body\n{_corpus.MANUAL_RATCHET_END}\n"
-    )
+    rendered = f"# T\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
+    existing = f"# T\n{_corpus.MANUAL_RATCHET_START}\nuser body\n{_corpus.MANUAL_RATCHET_END}\n"
     once = _corpus.merge_manual_ratchet(rendered, existing)
     twice = _corpus.merge_manual_ratchet(rendered, once)
     assert once == twice
 
 
 def test_merge_manual_ratchet_preserves_blank_line_inside_body() -> None:
-    rendered = (
-        f"#\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    )
+    rendered = f"#\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
     existing = (
         f"#\n{_corpus.MANUAL_RATCHET_START}\n"
         "first line\n\nsecond line after blank\n"
@@ -376,6 +366,4 @@ def test_render_perfect_patient_emits_markers() -> None:
     assert _corpus.MANUAL_RATCHET_START in rendered
     assert _corpus.MANUAL_RATCHET_END in rendered
     # Markers must appear in the right order.
-    assert rendered.index(_corpus.MANUAL_RATCHET_START) < rendered.index(
-        _corpus.MANUAL_RATCHET_END
-    )
+    assert rendered.index(_corpus.MANUAL_RATCHET_START) < rendered.index(_corpus.MANUAL_RATCHET_END)

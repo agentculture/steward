@@ -337,8 +337,21 @@ def _resolve_perfect_patient_path(args: argparse.Namespace, steward_root: Path) 
     workspace = steward_root.resolve()
     if args.perfect_patient_out is None:
         return workspace / _corpus.PERFECT_PATIENT_RELPATH
+
+    # Walk the user-supplied path through three stages so the returned value
+    # is *structurally* rooted at workspace, not just verified to be:
+    #
+    #   1. expanduser + resolve — collapse `~`, `..`, and symlinks.
+    #   2. relative_to(workspace) — raises ValueError if the resolved path
+    #      escapes the workspace; that's the security invariant.
+    #   3. workspace / relative — re-anchor to a workspace-rooted path. The
+    #      returned Path is `<constant workspace> / <validated relative>`,
+    #      so taint analysis (e.g. SonarCloud's pythonsecurity:S2083) can
+    #      see that no user-controlled prefix reaches the eventual write.
     candidate = args.perfect_patient_out.expanduser().resolve()
-    if not _is_inside(candidate, workspace):
+    try:
+        relative = candidate.relative_to(workspace)
+    except ValueError as exc:
         raise StewardError(
             code=EXIT_USER_ERROR,
             message=(
@@ -351,20 +364,8 @@ def _resolve_perfect_patient_path(args: argparse.Namespace, steward_root: Path) 
                 f"and intended for review-mode baselines you don't want "
                 f"committed — e.g. {workspace}/.patients/baseline-review.md"
             ),
-        )
-    return candidate
-
-
-def _is_inside(candidate: Path, root: Path) -> bool:
-    """True iff ``candidate`` is the same path as ``root`` or below it.
-
-    Uses `Path.is_relative_to` (3.9+) under the hood; that already handles the
-    `..`-traversal case because both paths are pre-resolved.
-    """
-    try:
-        return candidate.is_relative_to(root)
-    except ValueError:
-        return False
+        ) from exc
+    return workspace / relative
 
 
 def _refresh_perfect_patient(baseline: _corpus.Baseline, pp_path: Path) -> None:

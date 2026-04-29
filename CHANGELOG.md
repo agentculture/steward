@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-04-29
+
+### Fixed
+
+- pythonsecurity:S2083 (round 2): _resolve_perfect_patient_path now re-anchors the user-supplied override to workspace via candidate.relative_to(workspace), so the returned path is structurally workspace + validated-relative-tail. This satisfies SonarCloud taint analysis, which did not recognize the previous is_relative_to() check as a sanitizer.
+- CI lint failure: black/isort formatting on the test files appended in earlier commits (auto-generated test blocks bypassed local format hooks).
+
 ## [0.6.0] - 2026-04-29
 
 ### Added

@@ -98,6 +98,7 @@ def test_doctor_skills_convention_catches_name_mismatch(
 
 def test_perfect_patient_path_default_is_workspace_relative(tmp_path: Path) -> None:
     from argparse import Namespace
+
     from steward.cli._commands.doctor import _resolve_perfect_patient_path
 
     args = Namespace(perfect_patient_out=None)
@@ -108,6 +109,7 @@ def test_perfect_patient_path_default_is_workspace_relative(tmp_path: Path) -> N
 def test_perfect_patient_path_inside_workspace_accepted(tmp_path: Path) -> None:
     """A user override that lands inside the workspace is honoured."""
     from argparse import Namespace
+
     from steward.cli._commands.doctor import _resolve_perfect_patient_path
 
     target = tmp_path / ".patients" / "review.md"
@@ -119,6 +121,7 @@ def test_perfect_patient_path_inside_workspace_accepted(tmp_path: Path) -> None:
 def test_perfect_patient_path_outside_workspace_rejected(tmp_path: Path) -> None:
     """A user override pointing outside the workspace is a user error."""
     from argparse import Namespace
+
     from steward.cli._commands.doctor import _resolve_perfect_patient_path
     from steward.cli._errors import EXIT_USER_ERROR, StewardError
 
@@ -135,6 +138,7 @@ def test_perfect_patient_path_outside_workspace_rejected(tmp_path: Path) -> None
 def test_perfect_patient_path_traversal_rejected(tmp_path: Path) -> None:
     """`..` traversal that escapes the workspace is also rejected after resolve()."""
     from argparse import Namespace
+
     from steward.cli._commands.doctor import _resolve_perfect_patient_path
     from steward.cli._errors import StewardError
 
