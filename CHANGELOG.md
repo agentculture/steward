@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-29
+
+### Added
+
+- Workspace-confinement on --perfect-patient-out: paths outside the steward workspace are rejected at the CLI boundary with a remediation hint pointing at .patients/
+- Gitignored .patients/ directory at the workspace root for review-mode baselines you do not want committed
+- 4 new pytest cases covering _resolve_perfect_patient_path: default, inside-workspace, outside-workspace, and traversal rejection
+- CLAUDE.md sections: Workspace-confined writes (and .patients/), Doctor mutation-safety contract
+
+### Changed
+
+- docs/sibling-pattern.md mutation-safety row #5 distinguishes repair-mutation verbs (require --apply) from diagnostic outputs (write by default, skippable via --no-*); retires the contradiction Qodo flagged in PR #9 review
+- tests/test_cli_doctor_siblings.py uses .patients/ inside the real REPO_ROOT for the override-write smoke test, with try/finally cleanup
+
 ## [0.5.0] - 2026-04-29
 
 ### Added

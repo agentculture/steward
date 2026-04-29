@@ -107,6 +107,48 @@ skills, etc.) belong inside the markers; anything outside them is descriptive
 and gets overwritten. The merge logic lives in
 `steward/cli/_commands/_corpus.py::merge_manual_ratchet`.
 
+## Workspace-confined writes (and `.patients/`)
+
+Every path `steward doctor` writes to lives inside the steward workspace.
+That keeps the tool clone-and-go safe: nothing depends on a caller-supplied
+free-form path that could escape the working tree.
+
+- The default baseline write is `<workspace>/docs/perfect-patient.md`
+  (committed; the corpus baseline).
+- Per-sibling reports go into `<sibling>/docs/steward/steward-suggestions.md`
+  via `--scope siblings`; those targets are also git-tracked paths inside
+  their own repos.
+- For review-mode baselines you don't want committed (diff-and-discard,
+  what-if regenerations against a different sibling set, etc.), use
+  `--perfect-patient-out <workspace>/.patients/<name>.md`. The `.patients/`
+  directory at the workspace root is gitignored and exists for exactly
+  this purpose. Pointing the flag outside the workspace is rejected at
+  the CLI boundary with a remediation hint.
+
+This is the project's response to SonarCloud's `pythonsecurity:S2083`
+flag for `--perfect-patient-out`: rather than dismiss the warning, the
+contract is narrowed so user-supplied paths can never escape the
+workspace.
+
+## Doctor's mutation-safety contract
+
+`docs/sibling-pattern.md` says "any write verb defaults to dry-run;
+`--apply` to commit". `steward doctor` distinguishes two kinds of write:
+
+- **Diagnostic outputs** — the regenerated corpus baseline
+  (`docs/perfect-patient.md`) and per-sibling report files
+  (`docs/steward/steward-suggestions.md`). These are derived artifacts
+  about the *current* state; they're written by default and skippable
+  via `--no-refresh-perfect-patient` / `--no-write-reports`.
+- **Repairs** — actually mutating user state to fix an alignment gap
+  (creating a missing `scripts/` dir, vendoring `.markdownlint-cli2.yaml`,
+  etc.). These only happen under `steward doctor --apply`, which is on
+  the roadmap and not yet implemented.
+
+`--apply` is reserved for the second category. Don't gate diagnostic
+output writes behind it — the existing `--no-*` opt-outs already cover
+the "give me a pure read" case.
+
 ## Quality gates
 
 Local checks (run before pushing — most are also CI jobs):

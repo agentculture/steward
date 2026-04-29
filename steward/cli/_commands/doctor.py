@@ -323,9 +323,48 @@ def _resolve_workspace_root(args: argparse.Namespace, steward_root: Path) -> Pat
 
 
 def _resolve_perfect_patient_path(args: argparse.Namespace, steward_root: Path) -> Path:
-    if args.perfect_patient_out is not None:
-        return args.perfect_patient_out.expanduser().resolve()
-    return steward_root / _corpus.PERFECT_PATIENT_RELPATH
+    """Resolve where `--scope siblings` writes the regenerated baseline.
+
+    Default: `<steward_root>/docs/perfect-patient.md` (committed).
+
+    Override (`--perfect-patient-out PATH`) is constrained to live inside the
+    workspace — i.e. inside ``steward_root``. This keeps the tool's filesystem
+    footprint clone-and-go portable: the only paths it ever writes to are
+    derived from the working tree, never from the caller's free-form input.
+    For review-mode baselines you don't want committed, point the flag at the
+    gitignored `.patients/` directory at the workspace root.
+    """
+    workspace = steward_root.resolve()
+    if args.perfect_patient_out is None:
+        return workspace / _corpus.PERFECT_PATIENT_RELPATH
+    candidate = args.perfect_patient_out.expanduser().resolve()
+    if not _is_inside(candidate, workspace):
+        raise StewardError(
+            code=EXIT_USER_ERROR,
+            message=(
+                f"--perfect-patient-out must point inside the workspace "
+                f"({workspace}); got {candidate}."
+            ),
+            remediation=(
+                f"Point the flag at a path inside the workspace. The "
+                f"`.patients/` directory at the workspace root is gitignored "
+                f"and intended for review-mode baselines you don't want "
+                f"committed — e.g. {workspace}/.patients/baseline-review.md"
+            ),
+        )
+    return candidate
+
+
+def _is_inside(candidate: Path, root: Path) -> bool:
+    """True iff ``candidate`` is the same path as ``root`` or below it.
+
+    Uses `Path.is_relative_to` (3.9+) under the hood; that already handles the
+    `..`-traversal case because both paths are pre-resolved.
+    """
+    try:
+        return candidate.is_relative_to(root)
+    except ValueError:
+        return False
 
 
 def _refresh_perfect_patient(baseline: _corpus.Baseline, pp_path: Path) -> None:

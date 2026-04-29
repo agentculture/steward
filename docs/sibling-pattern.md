@@ -26,7 +26,7 @@ contract that those hard-coded checks are expected to honor.
 | 2 | Top-level package | `<pkg>/__init__.py`, `<pkg>/__main__.py` | `__version__` via `importlib.metadata`; `python -m <pkg>` works. |
 | 3 | CLI scaffolding | `<pkg>/cli/__init__.py`, `cli/_errors.py`, `cli/_output.py`, `cli/_commands/` | The afi-cli pattern: structured errors, stdout/stderr split, `--json`. |
 | 4 | Agent-first verbs | `cli/_commands/{learn,explain,whoami}.py` | `learn`/`explain` are the agent-affordance verbs; `whoami` is the smallest auth probe. |
-| 5 | Mutation safety | Any write verb defaults to dry-run; `--apply` to commit | Agents call CLIs in loops; safe-by-default is mandatory. |
+| 5 | Mutation safety | Repair / mutation verbs default to dry-run; `--apply` to commit. Diagnostic outputs (linter-style derived artifacts written into the working tree) may write by default and must be skippable via an explicit `--no-*` opt-out. | Agents call CLIs in loops; safe-by-default is mandatory for anything that *changes* the user's source. Diagnostic writes — corpus baselines, scored reports — are derived artifacts, not mutations. |
 | 6 | Tests | `tests/test_cli_*.py`, pytest-xdist, coverage | CI gate; no untested verb ships. |
 | 7 | CI | `.github/workflows/tests.yml`, `.github/workflows/publish.yml` | Tests + lint + version-check; PyPI/TestPyPI via Trusted Publishing. |
 | 8 | Changelog | `CHANGELOG.md` (Keep-a-Changelog) | Bumped on every PR by the `version-bump` skill. |

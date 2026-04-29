@@ -52,7 +52,12 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
             {"suffix": "c", "backend": "acp"},
         ],
     )
-    pp_out = tmp_path / "perfect-patient.md"
+    # `--perfect-patient-out` is constrained to live inside the steward
+    # workspace. .patients/ is the gitignored convention for review-mode
+    # baselines (see CLAUDE.md). Write to a uniquely-named sub-path there
+    # and clean up after — keeps the test side-effect-free in git terms.
+    patients_dir = REPO_ROOT / ".patients"
+    pp_out = patients_dir / f"test-{tmp_path.name}.md"
 
     # corpus mode resolves the steward checkout from cwd; run from the real one.
     cwd = os.getcwd()
@@ -73,21 +78,30 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
         os.chdir(cwd)
 
     captured = capsys.readouterr()
-    assert rc == 0, f"unexpected failure:\n{captured.out}\n{captured.err}"
-    assert "doctor clinic" in captured.out
-    assert "3 agent(s) across 2 repo(s)" in captured.out
+    try:
+        assert rc == 0, f"unexpected failure:\n{captured.out}\n{captured.err}"
+        assert "doctor clinic" in captured.out
+        assert "3 agent(s) across 2 repo(s)" in captured.out
 
-    # Each target now has the report file with the marker.
-    for repo_name in ("alpha", "beta"):
-        report = workspace / repo_name / _corpus.REPORT_RELPATH
-        assert report.is_file(), f"missing report for {repo_name}"
-        text = report.read_text()
-        assert _corpus.REPORT_MARKER_PREFIX in text
-        assert "# Steward suggestions" in text
+        # Each target now has the report file with the marker.
+        for repo_name in ("alpha", "beta"):
+            report = workspace / repo_name / _corpus.REPORT_RELPATH
+            assert report.is_file(), f"missing report for {repo_name}"
+            text = report.read_text()
+            assert _corpus.REPORT_MARKER_PREFIX in text
+            assert "# Steward suggestions" in text
 
-    # perfect-patient.md got refreshed at the override location.
-    assert pp_out.is_file()
-    assert "# Perfect patient" in pp_out.read_text()
+        # perfect-patient.md got refreshed at the override location.
+        assert pp_out.is_file()
+        assert "# Perfect patient" in pp_out.read_text()
+    finally:
+        # Clean up the .patients/ artifact we created (gitignored, but
+        # leaving stale files around between runs is sloppy).
+        if pp_out.exists():
+            pp_out.unlink()
+        # Remove the .patients/ dir if we made it empty.
+        if patients_dir.is_dir() and not any(patients_dir.iterdir()):
+            patients_dir.rmdir()
 
 
 def test_doctor_siblings_json_output_is_parseable(

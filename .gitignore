@@ -223,3 +223,9 @@ __marimo__/
 # Per-skill local overrides (optional, machine-specific).
 .claude/skills/*/local.yaml
 .claude/skills/*/scripts/*.local.sh
+
+# Workspace-confined scratch dir for review-mode `steward doctor` runs.
+# `--perfect-patient-out` is constrained to live inside the workspace to keep
+# the tool clone-and-go safe; .patients/ is the supported location for
+# baselines you don't want committed (e.g. diff-and-discard review snapshots).
+.patients/
