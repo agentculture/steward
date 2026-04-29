@@ -101,19 +101,28 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
     assert "doctor clinic" in captured.out
     assert "3 agent(s) across 2 repo(s)" in captured.out
 
-    # Each target now has the report file with the marker.
+    # All output now lives under .prescriptions/<slug>/ inside the fake
+    # steward checkout. Slug derives from workspace_root's basename ("ws").
+    prescription_dir = fake_root / ".prescriptions" / "ws"
+    assert prescription_dir.is_dir()
+
+    # Per-sibling reports live alongside the baseline, not inside the
+    # sibling repos themselves (doctor never writes into other repos).
     for repo_name in ("alpha", "beta"):
-        report = workspace / repo_name / _corpus.REPORT_RELPATH
-        assert report.is_file(), f"missing report for {repo_name}"
+        report = prescription_dir / repo_name / _corpus.REPORT_BASENAME
+        assert report.is_file(), f"missing prescription report for {repo_name}"
         text = report.read_text()
         assert _corpus.REPORT_MARKER_PREFIX in text
         assert "# Steward suggestions" in text
+        # Doctor must NOT have written into the sibling repo.
+        assert not (workspace / repo_name / "docs" / "steward").exists()
 
-    # perfect-patient.md got refreshed inside the fake steward checkout, not
-    # the real one.
-    pp_out = fake_root / "docs" / "perfect-patient.md"
+    # perfect-patient.md is the prescription form, not the canonical doc.
+    pp_out = prescription_dir / _corpus.PERFECT_PATIENT_BASENAME
     assert pp_out.is_file()
     assert "# Perfect patient" in pp_out.read_text()
+    # And the canonical committed location is untouched.
+    assert not (fake_root / "docs" / "perfect-patient.md").exists()
 
 
 def test_doctor_siblings_json_output_is_parseable(
@@ -181,7 +190,11 @@ def test_doctor_siblings_no_write_skips_report_files(
 
     capsys.readouterr()  # drain output
     assert rc == 0
-    assert not (workspace / "alpha" / _corpus.REPORT_RELPATH).exists()
+    # No prescription dir should have been created anywhere because we
+    # passed both --no-write-reports and --no-refresh-perfect-patient.
+    assert not (REPO_ROOT / ".prescriptions" / "ws").exists()
+    # And doctor never writes into the sibling repos under any flag combo.
+    assert not (workspace / "alpha" / "docs" / "steward").exists()
 
 
 def test_doctor_siblings_empty_workspace_is_a_diagnostic(

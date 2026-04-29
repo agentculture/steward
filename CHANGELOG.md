@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-29
+
+### Added
+
+- .prescriptions/ to .gitignore alongside .patients/. Both dirs are scratch — .patients/ for input fixtures (cloned remote workspaces), .prescriptions/ for output (each runs feedback).
+
+### Changed
+
+- doctor write surface: `--scope siblings` now writes into `<steward-root>/.prescriptions/<slug>/`, never into the steward checkout's committed `docs/` nor into other sibling repos. Per-sibling reports go to `<prescription>/<sibling-name>/steward-suggestions.md`; the regenerated corpus baseline goes to `<prescription>/perfect-patient.md`.
+- docs/perfect-patient.md is now hand-curated (canonical). Doctor never overwrites it; users diff the prescription form against the canonical to see corpus drift, then copy in changes they accept.
+
+### Fixed
+
+- pythonsecurity:S2083 BLOCKER (rounds 1-3 in this PR): the underlying read+write round-trip on docs/perfect-patient.md is gone, so theres no source-to-sink taint flow for Sonar to track.
+
 ## [0.7.0] - 2026-04-29
 
 ### Added

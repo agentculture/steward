@@ -240,130 +240,33 @@ def test_skill_bullets_carry_frontmatter_descriptions(tmp_path: Path) -> None:
     assert "- `no-meta`\n" in body
 
 
-def test_write_repo_report_writes_marked_file(tmp_path: Path) -> None:
-    repo = tmp_path / "alpha"
-    repo.mkdir()
+def test_write_prescription_report_writes_to_target(tmp_path: Path) -> None:
+    target = tmp_path / "out" / "steward-suggestions.md"
     body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    path, status = _corpus.write_repo_report(repo, body)
-    assert status == "written"
-    assert path == repo / _corpus.REPORT_RELPATH
-    assert path.read_text().startswith("# Steward suggestions")
+    path = _corpus.write_prescription_report(target, body)
+    assert path == target
+    assert target.is_file()
+    assert target.read_text().startswith("# Steward suggestions")
 
 
-def test_write_repo_report_idempotent(tmp_path: Path) -> None:
-    repo = tmp_path / "alpha"
-    repo.mkdir()
-    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    _corpus.write_repo_report(repo, body)
-    path, status = _corpus.write_repo_report(repo, body)
-    assert status == "written"
-    assert path.read_text().count("# Steward suggestions") == 1
+def test_write_prescription_report_creates_parent_dirs(tmp_path: Path) -> None:
+    """The prescription dir tree may not yet exist on first run."""
+    target = tmp_path / "deeply" / "nested" / "dir" / "report.md"
+    body = "# x\n"
+    _corpus.write_prescription_report(target, body)
+    assert target.is_file()
 
 
-def test_write_repo_report_finds_marker_below_first_5_lines(tmp_path: Path) -> None:
-    """The marker scan covers the entire file — extra header lines (editor
-    banner, frontmatter, etc.) above the marker must NOT trigger the
-    skipped-unmanaged path."""
-    repo = tmp_path / "alpha"
-    target_dir = repo / "docs" / "steward"
-    target_dir.mkdir(parents=True)
-    target = target_dir / "steward-suggestions.md"
-    target.write_text(
-        "# Steward suggestions\n\n"
-        "<!-- editor banner line 1 -->\n"
-        "<!-- editor banner line 2 -->\n"
-        "<!-- editor banner line 3 -->\n"
-        "<!-- editor banner line 4 -->\n"
-        f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    )
-    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-02.\n"
-    _path, status = _corpus.write_repo_report(repo, body)
-    assert status == "written"
+def test_write_prescription_report_overwrites_without_complaint(tmp_path: Path) -> None:
+    """No 'preserve unmanaged hand-edits' branch — prescriptions are scratch."""
+    target = tmp_path / "report.md"
+    target.write_text("# stale content\n")
+    body = "# fresh content\n"
+    _corpus.write_prescription_report(target, body)
+    assert target.read_text() == "# fresh content\n"
 
 
-def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
-    repo = tmp_path / "alpha"
-    target_dir = repo / "docs" / "steward"
-    target_dir.mkdir(parents=True)
-    target = target_dir / "steward-suggestions.md"
-    target.write_text("# Hand-written notes\n\nDon't overwrite me.\n")
-
-    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    path, status = _corpus.write_repo_report(repo, body)
-    assert status == "skipped-unmanaged"
-    assert "Hand-written notes" in path.read_text()
-
-
-# --- merge_manual_ratchet --------------------------------------------------
-
-
-def test_merge_manual_ratchet_no_existing_returns_rendered_unchanged() -> None:
-    rendered = f"# Title\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    assert _corpus.merge_manual_ratchet(rendered, None) == rendered
-
-
-def test_merge_manual_ratchet_existing_with_no_markers_returns_rendered() -> None:
-    rendered = f"# v2\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    existing = "# v1 hand-edited but no markers\n\nNothing to splice.\n"
-    assert _corpus.merge_manual_ratchet(rendered, existing) == rendered
-
-
-def test_merge_manual_ratchet_splices_body_from_existing_into_rendered() -> None:
-    rendered = (
-        "# Title\n## Auto section A: NEW value\n\n"
-        f"{_corpus.MANUAL_RATCHET_START}\nempty default\n{_corpus.MANUAL_RATCHET_END}\n"
-        "## Auto section B\n"
-    )
-    existing = (
-        "# Title\n## Auto section A: OLD value\n\n"
-        f"{_corpus.MANUAL_RATCHET_START}\n"
-        "Hand-curated tier list:\n- foo\n- bar\n"
-        f"{_corpus.MANUAL_RATCHET_END}\n"
-        "## Auto section B\n"
-    )
-    out = _corpus.merge_manual_ratchet(rendered, existing)
-    # The auto section A reflects the new render.
-    assert "NEW value" in out
-    assert "OLD value" not in out
-    # The hand-curated body is preserved verbatim between markers.
-    assert "Hand-curated tier list:\n- foo\n- bar" in out
-    # The default empty body from the rendered template is replaced.
-    assert "empty default" not in out
-
-
-def test_merge_manual_ratchet_round_trip_idempotent() -> None:
-    """Re-running the merge against the merged output must be a no-op."""
-    rendered = f"# T\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    existing = f"# T\n{_corpus.MANUAL_RATCHET_START}\nuser body\n{_corpus.MANUAL_RATCHET_END}\n"
-    once = _corpus.merge_manual_ratchet(rendered, existing)
-    twice = _corpus.merge_manual_ratchet(rendered, once)
-    assert once == twice
-
-
-def test_merge_manual_ratchet_preserves_blank_line_inside_body() -> None:
-    rendered = f"#\n{_corpus.MANUAL_RATCHET_START}\nempty\n{_corpus.MANUAL_RATCHET_END}\n"
-    existing = (
-        f"#\n{_corpus.MANUAL_RATCHET_START}\n"
-        "first line\n\nsecond line after blank\n"
-        f"{_corpus.MANUAL_RATCHET_END}\n"
-    )
-    out = _corpus.merge_manual_ratchet(rendered, existing)
-    assert "first line\n\nsecond line after blank" in out
-
-
-def test_render_perfect_patient_emits_markers() -> None:
-    baseline = _corpus.Baseline(
-        agent_count=0,
-        repo_count=0,
-        required_yaml_keys=set(),
-        recommended_yaml_keys=set(),
-        required_skills=set(),
-        recommended_skills=set(),
-        required_claude_md_sections=set(),
-        skill_descriptions={},
-    )
-    rendered = _corpus.render_perfect_patient(baseline)
-    assert _corpus.MANUAL_RATCHET_START in rendered
-    assert _corpus.MANUAL_RATCHET_END in rendered
-    # Markers must appear in the right order.
-    assert rendered.index(_corpus.MANUAL_RATCHET_START) < rendered.index(_corpus.MANUAL_RATCHET_END)
+def test_write_prescription_report_appends_trailing_newline(tmp_path: Path) -> None:
+    target = tmp_path / "report.md"
+    _corpus.write_prescription_report(target, "no-newline")
+    assert target.read_text() == "no-newline\n"

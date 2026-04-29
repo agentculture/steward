@@ -99,54 +99,56 @@ Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
 `pr-review`, etc.) are recorded in `docs/skill-sources.md` so `doctor` can
 vendor deterministically.
 
-`docs/perfect-patient.md` is two layers: corpus-derived sections regenerated
-by `steward doctor --scope siblings`, and a manual-ratchet block bounded by
-`<!-- steward:manual-ratchet:start -->` and
-`<!-- steward:manual-ratchet:end -->` markers that survives regeneration. Hand-curated tier lists (Recommended / Optional / Conditional
-skills, etc.) belong inside the markers; anything outside them is descriptive
-and gets overwritten. The merge logic lives in
-`steward/cli/_commands/_corpus.py::merge_manual_ratchet`.
+`docs/perfect-patient.md` is the *canonical* baseline — committed,
+hand-curated. Doctor never overwrites it in place; it writes a fresh
+prescription form into the gitignored `.prescriptions/<slug>/` directory
+on every `--scope siblings` run, and you `diff` against the canonical
+when you want to see what changed.
 
-## Where doctor writes (and what the user can influence)
+## Patients and prescriptions
 
-`steward doctor` accepts no caller-supplied paths for its writes. There is
-no `--perfect-patient-out` (dropped — it was an injection surface SonarCloud
-correctly flagged with `pythonsecurity:S2083`, and the workaround patterns
-were all worse than just removing it). Output paths are derived from
-constants:
+Doctor splits its read locations from its write locations:
 
-- The regenerated corpus baseline always writes to
-  `<steward_root>/docs/perfect-patient.md` (committed).
-- Per-sibling reports always write to
-  `<sibling>/docs/steward/steward-suggestions.md` for each sibling in the
-  workspace.
-- The `<sibling>` paths come from directory listing of `<workspace_root>`,
-  not from caller free-form input. `--workspace-root PATH` selects which
-  directory to enumerate, but the per-sibling paths are derived from the
-  filesystem entries themselves.
+- **`docs/perfect-patient.md`** (committed) — the *canonical* baseline.
+  Hand-curated. Doctor never overwrites this file in place. It's the
+  reference other agents and tools check against; if you want to ratchet
+  what it says, edit it like any other doc.
+- **`.patients/<slug>/`** (gitignored) — input fixtures: clones of remote
+  workspaces. Today, `git clone <url> .patients/<slug>/` populates it
+  manually; the planned `--from-github URL` flag (see issue #10) will
+  automate that step.
+- **`.prescriptions/<slug>/`** (gitignored) — output: the regenerated
+  corpus baseline at `<prescription>/perfect-patient.md` plus per-sibling
+  reports at `<prescription>/<sibling-name>/steward-suggestions.md`.
+  Each doctor run writes a fresh prescription; nothing is preserved
+  across runs because nothing in the prescription dir was hand-edited.
 
-If you need to regenerate the baseline against a different sibling set
-(e.g. compare what `perfect-patient.md` would look like for a fork), the
-clone-and-run pattern is the supported workflow:
+The slug is `_slug_from_workspace(workspace_root)` — a sanitised basename
+of the workspace path. Anything outside `[A-Za-z0-9._-]` collapses to a
+single dash, so the slug carries no path separators or traversal
+sequences and the prescription path is provably under
+`<steward_root>/.prescriptions/`.
 
-```bash
-git clone <fork-url> .patients/<slug>/
-steward doctor --scope siblings --workspace-root .patients/<slug>/
-```
+### Why this shape
 
-`.patients/` is gitignored. A future `--from-github URL` flag is planned
-to make this a single command.
+- Doctor never writes into other repos. Each sibling can pull their
+  report out of `.prescriptions/` if they want; doctor stops being
+  invasive across repo boundaries.
+- Doctor never reads its own output to merge with new content. No
+  read+write round-trip on the same file means no SonarCloud
+  `pythonsecurity:S2083` taint flow to mitigate.
+- Comparing prescription against canonical is a literal `diff`. If you
+  like what changed, copy the relevant sections in by hand.
 
 ## Doctor's mutation-safety contract
 
 `docs/sibling-pattern.md` says "any write verb defaults to dry-run;
 `--apply` to commit". `steward doctor` distinguishes two kinds of write:
 
-- **Diagnostic outputs** — the regenerated corpus baseline
-  (`docs/perfect-patient.md`) and per-sibling report files
-  (`docs/steward/steward-suggestions.md`). These are derived artifacts
-  about the *current* state; they're written by default and skippable
-  via `--no-refresh-perfect-patient` / `--no-write-reports`.
+- **Diagnostic outputs** — the prescription dir (corpus baseline +
+  per-sibling reports). These are derived artifacts about the *current*
+  state, scoped to a gitignored scratch dir; written by default,
+  skippable via `--no-refresh-perfect-patient` / `--no-write-reports`.
 - **Repairs** — actually mutating user state to fix an alignment gap
   (creating a missing `scripts/` dir, vendoring `.markdownlint-cli2.yaml`,
   etc.). These only happen under `steward doctor --apply`, which is on

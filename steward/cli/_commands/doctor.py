@@ -9,16 +9,22 @@ Two modes:
   has a sibling `scripts/` directory + matching frontmatter `name`).
   Aggregates findings; exits non-zero if any check produced findings.
 * ``--scope siblings``: walks ``<workspace_root>/*/culture.yaml``,
-  scores every declared agent against a corpus-derived baseline,
-  writes ``docs/steward/steward-suggestions.md`` into each target,
-  and refreshes ``docs/perfect-patient.md`` in the steward checkout.
-  Diagnostic-only — does not exit non-zero on per-agent findings.
+  scores every declared agent against a corpus-derived baseline, and
+  emits all output into a single per-run prescription directory under
+  ``<steward_root>/.prescriptions/<slug>/`` (gitignored). Per-sibling
+  reports land at ``<prescription_dir>/<sibling-name>/steward-suggestions.md``;
+  the regenerated baseline at ``<prescription_dir>/perfect-patient.md``.
+  Doctor never writes into the sibling repos themselves, and never
+  overwrites the committed ``docs/perfect-patient.md`` in place — that
+  document is hand-curated; diff against the prescription form to see
+  what the corpus currently says. Diagnostic-only: does not exit
+  non-zero on per-agent findings.
 
 The roadmap's ``--apply`` repair mode (create missing `scripts/`,
 `.markdownlint-cli2.yaml`, etc.) is not yet implemented; corpus mode
-emits diagnostic *output* (per-target feedback files + the synthesized
-baseline) by default and provides ``--no-write-reports`` /
-``--no-refresh-perfect-patient`` opt-outs for pure dry-run.
+emits diagnostic *output* into the prescription dir by default and
+provides ``--no-write-reports`` / ``--no-refresh-perfect-patient``
+opt-outs for pure dry-run.
 """
 
 from __future__ import annotations
@@ -313,26 +319,50 @@ def _resolve_workspace_root(args: argparse.Namespace, steward_root: Path) -> Pat
     return workspace_root
 
 
-def _resolve_perfect_patient_path(steward_root: Path) -> Path:
-    """Where `--scope siblings` writes the regenerated baseline.
+def _slug_from_workspace(workspace_root: Path) -> str:
+    """Derive a deterministic, filesystem-safe slug from a workspace path.
 
-    Always `<steward_root>/docs/perfect-patient.md`. There is no override —
-    the only path steward writes to is derived from the steward checkout
-    itself, never from caller-supplied data. Users who want to regenerate
-    against a different sibling set should clone that workspace and run
-    doctor against it (with `--workspace-root` or by `cd`-ing into it),
-    not redirect output via a path flag.
+    Used to scope each doctor run's output under
+    ``<steward-root>/.prescriptions/<slug>/``. The slug is built from the
+    workspace's basename, sanitised to contain only ``[A-Za-z0-9._-]``;
+    anything else collapses to a single ``-``. The basename is the only
+    user-derived component, and after the regex replace it can carry no
+    path separators or traversal sequences.
     """
-    return steward_root.resolve() / _corpus.PERFECT_PATIENT_RELPATH
+    raw = workspace_root.resolve().name or "workspace"
+    sanitised = re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-.") or "workspace"
+    return sanitised
 
 
-def _refresh_perfect_patient(baseline: _corpus.Baseline, pp_path: Path) -> None:
-    pp_path.parent.mkdir(parents=True, exist_ok=True)
-    rendered = _corpus.render_perfect_patient(baseline)
-    # Force UTF-8 explicitly: the rendered markdown contains non-ASCII glyphs
-    # (≥, –, etc.) that crash on systems with a non-UTF-8 default locale.
-    existing = pp_path.read_text(encoding="utf-8") if pp_path.is_file() else None
-    pp_path.write_text(_corpus.merge_manual_ratchet(rendered, existing), encoding="utf-8")
+def _resolve_prescription_dir(steward_root: Path, workspace_root: Path) -> Path:
+    """Where `--scope siblings` writes its prescriptions for this run.
+
+    Always ``<steward_root>/.prescriptions/<slug>/``. The directory is
+    gitignored. Path components: a constant prefix (`steward_root`), a
+    constant subdir name (`.prescriptions`), and a sanitised basename
+    slug derived from the workspace. No caller-supplied path data flows
+    into the construction.
+    """
+    return (
+        steward_root.resolve()
+        / _corpus.PRESCRIPTIONS_DIRNAME
+        / _slug_from_workspace(workspace_root)
+    )
+
+
+def _refresh_perfect_patient(baseline: _corpus.Baseline, prescription_dir: Path) -> Path:
+    """Write the regenerated corpus baseline into the prescription dir.
+
+    Returns the written path. Each run writes a fresh file — there is no
+    read+merge round-trip, so the previous ``merge_manual_ratchet``
+    machinery is gone. To ratchet content above the corpus tally, edit
+    the committed ``docs/perfect-patient.md`` directly; doctor never
+    touches it.
+    """
+    target = prescription_dir / _corpus.PERFECT_PATIENT_BASENAME
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_corpus.render_perfect_patient(baseline), encoding="utf-8")
+    return target
 
 
 def _run_repo_checks(repo_path: Path, selected_repo_checks: list[str]) -> list[Finding]:
@@ -422,10 +452,10 @@ def _handle_siblings(args: argparse.Namespace) -> int:
 
     baseline = _corpus.synthesize_baseline(agents)
 
+    prescription_dir = _resolve_prescription_dir(steward_root, workspace_root)
     pp_path: Path | None = None
     if args.refresh_perfect_patient:
-        pp_path = _resolve_perfect_patient_path(steward_root)
-        _refresh_perfect_patient(baseline, pp_path)
+        pp_path = _refresh_perfect_patient(baseline, prescription_dir)
 
     selected_repo_checks = args.check or sorted(CHECKS.keys())
 
@@ -458,12 +488,13 @@ def _handle_siblings(args: argparse.Namespace) -> int:
 
         if args.write_reports:
             body = _corpus.render_repo_report(repo_path, repo_agents, repo_findings, agent_findings)
+            target = prescription_dir / repo_path.name / _corpus.REPORT_BASENAME
             try:
-                path, status = _corpus.write_repo_report(repo_path, body)
+                path = _corpus.write_prescription_report(target, body)
             except OSError as exc:
-                emit_diagnostic(f"warning: could not write report into {repo_path.name}: {exc}")
+                emit_diagnostic(f"warning: could not write report for {repo_path.name}: {exc}")
                 continue
-            write_log.append((path, status))
+            write_log.append((path, "written"))
 
     if args.json:
         emit_result(json_mod.dumps(structured, indent=2))

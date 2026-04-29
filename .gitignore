@@ -224,7 +224,15 @@ __marimo__/
 .claude/skills/*/local.yaml
 .claude/skills/*/scripts/*.local.sh
 
-# Reserved for the planned `--from-github URL` feature: clone the URL into
-# .patients/<repo-slug>/ and run `--scope siblings` against that workspace.
-# Gitignored because clones are scratch fixtures, not committed source.
+# Doctor's two scratch dirs. Gitignored because both are derived/scratch.
+#
+# .patients/   — input fixtures: clones of remote workspaces. The planned
+#                `--from-github URL` flag will populate this; today, the
+#                clone-and-run pattern fills it manually.
+# .prescriptions/ — output: doctor's feedback for each patient. Per-run
+#                slug subdir contains the corpus baseline + per-sibling
+#                steward-suggestions reports. Read-write isolation between
+#                inputs and outputs is what makes this design clone-and-go
+#                safe (no read+write round-trip on the same file).
 .patients/
+.prescriptions/
