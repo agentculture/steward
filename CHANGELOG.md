@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-29
+
+### Added
+
+- pypi-maintainer skill (renamed from change-package, generalized for any PyPI package)
+- jekyll-test skill with end-to-end build + validation script
+- Vendored discord-notify, gh-issues, notebooklm, run-tests, sonarclaude skills (canonical home is now steward)
+- perfect-patient.md: Optional and Conditional skill tiers (manually curated)
+
+### Changed
+
+- perfect-patient.md Recommended skills tier expanded to include the 7 newly vendored skills
+- skill-sources.md: 7 new upstream entries listing steward as canonical owner
+- run-tests script: coverage source now resolves from pyproject.toml [tool.coverage.run] (portable across siblings)
+- sonarclaude script: project key now resolves from $SONAR_PROJECT or --project (no hard-coded default)
+
 ## [0.3.2] - 2026-04-26
 
 ### Changed
