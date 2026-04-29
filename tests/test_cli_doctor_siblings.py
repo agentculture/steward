@@ -36,11 +36,38 @@ def _seed_sibling(workspace: Path, name: str, agents: list[dict]) -> Path:
     return repo
 
 
+def _seed_fake_steward_root(parent: Path) -> Path:
+    """Build the minimum directory tree that satisfies _resolve_steward_repo_root.
+
+    `_resolve_steward_repo_root` requires (1) a git checkout (it walks up
+    from cwd looking for `.git/`) and (2) the vendored portability-lint.sh
+    at the canonical relpath. Replicate both here, copying the real script
+    byte-for-byte so the tests exercise the actual file. Used to keep
+    `--scope siblings` write tests fully tmpdir-scoped — never polluting
+    the real REPO_ROOT/docs/perfect-patient.md.
+    """
+    import subprocess
+
+    fake_root = parent / "fake_steward"
+    scripts = fake_root / ".claude" / "skills" / "pr-review" / "scripts"
+    scripts.mkdir(parents=True)
+    real = REPO_ROOT / ".claude" / "skills" / "pr-review" / "scripts" / "portability-lint.sh"
+    (scripts / "portability-lint.sh").write_bytes(real.read_bytes())
+    (scripts / "portability-lint.sh").chmod(0o755)
+    # `_find_git_root` looks for `.git/`; init a bare repo to satisfy that.
+    subprocess.run(["git", "init", "-q", str(fake_root)], check=True)
+    return fake_root
+
+
 def test_doctor_siblings_writes_reports_and_perfect_patient(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Use a fake steward checkout inside tmp_path so the regenerated baseline
+    # writes into tmp, not into the real REPO_ROOT/docs/perfect-patient.md.
+    # Sibling workspace is a peer directory next to it.
+    fake_root = _seed_fake_steward_root(tmp_path)
     workspace = tmp_path / "ws"
     workspace.mkdir()
     _seed_sibling(workspace, "alpha", [{"suffix": "a", "backend": "claude"}])
@@ -52,16 +79,10 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
             {"suffix": "c", "backend": "acp"},
         ],
     )
-    # `--perfect-patient-out` is constrained to live inside the steward
-    # workspace. .patients/ is the gitignored convention for review-mode
-    # baselines (see CLAUDE.md). Write to a uniquely-named sub-path there
-    # and clean up after — keeps the test side-effect-free in git terms.
-    patients_dir = REPO_ROOT / ".patients"
-    pp_out = patients_dir / f"test-{tmp_path.name}.md"
 
-    # corpus mode resolves the steward checkout from cwd; run from the real one.
+    # corpus mode resolves the steward checkout from cwd; run from the fake one.
     cwd = os.getcwd()
-    os.chdir(REPO_ROOT)
+    os.chdir(fake_root)
     try:
         rc = main(
             [
@@ -70,38 +91,29 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
                 "siblings",
                 "--workspace-root",
                 str(workspace),
-                "--perfect-patient-out",
-                str(pp_out),
             ]
         )
     finally:
         os.chdir(cwd)
 
     captured = capsys.readouterr()
-    try:
-        assert rc == 0, f"unexpected failure:\n{captured.out}\n{captured.err}"
-        assert "doctor clinic" in captured.out
-        assert "3 agent(s) across 2 repo(s)" in captured.out
+    assert rc == 0, f"unexpected failure:\n{captured.out}\n{captured.err}"
+    assert "doctor clinic" in captured.out
+    assert "3 agent(s) across 2 repo(s)" in captured.out
 
-        # Each target now has the report file with the marker.
-        for repo_name in ("alpha", "beta"):
-            report = workspace / repo_name / _corpus.REPORT_RELPATH
-            assert report.is_file(), f"missing report for {repo_name}"
-            text = report.read_text()
-            assert _corpus.REPORT_MARKER_PREFIX in text
-            assert "# Steward suggestions" in text
+    # Each target now has the report file with the marker.
+    for repo_name in ("alpha", "beta"):
+        report = workspace / repo_name / _corpus.REPORT_RELPATH
+        assert report.is_file(), f"missing report for {repo_name}"
+        text = report.read_text()
+        assert _corpus.REPORT_MARKER_PREFIX in text
+        assert "# Steward suggestions" in text
 
-        # perfect-patient.md got refreshed at the override location.
-        assert pp_out.is_file()
-        assert "# Perfect patient" in pp_out.read_text()
-    finally:
-        # Clean up the .patients/ artifact we created (gitignored, but
-        # leaving stale files around between runs is sloppy).
-        if pp_out.exists():
-            pp_out.unlink()
-        # Remove the .patients/ dir if we made it empty.
-        if patients_dir.is_dir() and not any(patients_dir.iterdir()):
-            patients_dir.rmdir()
+    # perfect-patient.md got refreshed inside the fake steward checkout, not
+    # the real one.
+    pp_out = fake_root / "docs" / "perfect-patient.md"
+    assert pp_out.is_file()
+    assert "# Perfect patient" in pp_out.read_text()
 
 
 def test_doctor_siblings_json_output_is_parseable(

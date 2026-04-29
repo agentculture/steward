@@ -262,15 +262,6 @@ def register(sub: argparse._SubParsersAction) -> None:
         default=True,
         help="(--scope siblings) Don't regenerate docs/perfect-patient.md.",
     )
-    parser.add_argument(
-        "--perfect-patient-out",
-        type=Path,
-        default=None,
-        help=(
-            "(--scope siblings) Override the path for the synthesized "
-            "perfect-patient.md (default: <steward-root>/docs/perfect-patient.md)."
-        ),
-    )
     parser.set_defaults(func=_handle)
 
 
@@ -322,50 +313,17 @@ def _resolve_workspace_root(args: argparse.Namespace, steward_root: Path) -> Pat
     return workspace_root
 
 
-def _resolve_perfect_patient_path(args: argparse.Namespace, steward_root: Path) -> Path:
-    """Resolve where `--scope siblings` writes the regenerated baseline.
+def _resolve_perfect_patient_path(steward_root: Path) -> Path:
+    """Where `--scope siblings` writes the regenerated baseline.
 
-    Default: `<steward_root>/docs/perfect-patient.md` (committed).
-
-    Override (`--perfect-patient-out PATH`) is constrained to live inside the
-    workspace — i.e. inside ``steward_root``. This keeps the tool's filesystem
-    footprint clone-and-go portable: the only paths it ever writes to are
-    derived from the working tree, never from the caller's free-form input.
-    For review-mode baselines you don't want committed, point the flag at the
-    gitignored `.patients/` directory at the workspace root.
+    Always `<steward_root>/docs/perfect-patient.md`. There is no override —
+    the only path steward writes to is derived from the steward checkout
+    itself, never from caller-supplied data. Users who want to regenerate
+    against a different sibling set should clone that workspace and run
+    doctor against it (with `--workspace-root` or by `cd`-ing into it),
+    not redirect output via a path flag.
     """
-    workspace = steward_root.resolve()
-    if args.perfect_patient_out is None:
-        return workspace / _corpus.PERFECT_PATIENT_RELPATH
-
-    # Walk the user-supplied path through three stages so the returned value
-    # is *structurally* rooted at workspace, not just verified to be:
-    #
-    #   1. expanduser + resolve — collapse `~`, `..`, and symlinks.
-    #   2. relative_to(workspace) — raises ValueError if the resolved path
-    #      escapes the workspace; that's the security invariant.
-    #   3. workspace / relative — re-anchor to a workspace-rooted path. The
-    #      returned Path is `<constant workspace> / <validated relative>`,
-    #      so taint analysis (e.g. SonarCloud's pythonsecurity:S2083) can
-    #      see that no user-controlled prefix reaches the eventual write.
-    candidate = args.perfect_patient_out.expanduser().resolve()
-    try:
-        relative = candidate.relative_to(workspace)
-    except ValueError as exc:
-        raise StewardError(
-            code=EXIT_USER_ERROR,
-            message=(
-                f"--perfect-patient-out must point inside the workspace "
-                f"({workspace}); got {candidate}."
-            ),
-            remediation=(
-                f"Point the flag at a path inside the workspace. The "
-                f"`.patients/` directory at the workspace root is gitignored "
-                f"and intended for review-mode baselines you don't want "
-                f"committed — e.g. {workspace}/.patients/baseline-review.md"
-            ),
-        ) from exc
-    return workspace / relative
+    return steward_root.resolve() / _corpus.PERFECT_PATIENT_RELPATH
 
 
 def _refresh_perfect_patient(baseline: _corpus.Baseline, pp_path: Path) -> None:
@@ -466,7 +424,7 @@ def _handle_siblings(args: argparse.Namespace) -> int:
 
     pp_path: Path | None = None
     if args.refresh_perfect_patient:
-        pp_path = _resolve_perfect_patient_path(args, steward_root)
+        pp_path = _resolve_perfect_patient_path(steward_root)
         _refresh_perfect_patient(baseline, pp_path)
 
     selected_repo_checks = args.check or sorted(CHECKS.keys())

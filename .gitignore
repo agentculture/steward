@@ -224,8 +224,7 @@ __marimo__/
 .claude/skills/*/local.yaml
 .claude/skills/*/scripts/*.local.sh
 
-# Workspace-confined scratch dir for review-mode `steward doctor` runs.
-# `--perfect-patient-out` is constrained to live inside the workspace to keep
-# the tool clone-and-go safe; .patients/ is the supported location for
-# baselines you don't want committed (e.g. diff-and-discard review snapshots).
+# Reserved for the planned `--from-github URL` feature: clone the URL into
+# .patients/<repo-slug>/ and run `--scope siblings` against that workspace.
+# Gitignored because clones are scratch fixtures, not committed source.
 .patients/

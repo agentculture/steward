@@ -107,28 +107,35 @@ skills, etc.) belong inside the markers; anything outside them is descriptive
 and gets overwritten. The merge logic lives in
 `steward/cli/_commands/_corpus.py::merge_manual_ratchet`.
 
-## Workspace-confined writes (and `.patients/`)
+## Where doctor writes (and what the user can influence)
 
-Every path `steward doctor` writes to lives inside the steward workspace.
-That keeps the tool clone-and-go safe: nothing depends on a caller-supplied
-free-form path that could escape the working tree.
+`steward doctor` accepts no caller-supplied paths for its writes. There is
+no `--perfect-patient-out` (dropped — it was an injection surface SonarCloud
+correctly flagged with `pythonsecurity:S2083`, and the workaround patterns
+were all worse than just removing it). Output paths are derived from
+constants:
 
-- The default baseline write is `<workspace>/docs/perfect-patient.md`
-  (committed; the corpus baseline).
-- Per-sibling reports go into `<sibling>/docs/steward/steward-suggestions.md`
-  via `--scope siblings`; those targets are also git-tracked paths inside
-  their own repos.
-- For review-mode baselines you don't want committed (diff-and-discard,
-  what-if regenerations against a different sibling set, etc.), use
-  `--perfect-patient-out <workspace>/.patients/<name>.md`. The `.patients/`
-  directory at the workspace root is gitignored and exists for exactly
-  this purpose. Pointing the flag outside the workspace is rejected at
-  the CLI boundary with a remediation hint.
+- The regenerated corpus baseline always writes to
+  `<steward_root>/docs/perfect-patient.md` (committed).
+- Per-sibling reports always write to
+  `<sibling>/docs/steward/steward-suggestions.md` for each sibling in the
+  workspace.
+- The `<sibling>` paths come from directory listing of `<workspace_root>`,
+  not from caller free-form input. `--workspace-root PATH` selects which
+  directory to enumerate, but the per-sibling paths are derived from the
+  filesystem entries themselves.
 
-This is the project's response to SonarCloud's `pythonsecurity:S2083`
-flag for `--perfect-patient-out`: rather than dismiss the warning, the
-contract is narrowed so user-supplied paths can never escape the
-workspace.
+If you need to regenerate the baseline against a different sibling set
+(e.g. compare what `perfect-patient.md` would look like for a fork), the
+clone-and-run pattern is the supported workflow:
+
+```bash
+git clone <fork-url> .patients/<slug>/
+steward doctor --scope siblings --workspace-root .patients/<slug>/
+```
+
+`.patients/` is gitignored. A future `--from-github URL` flag is planned
+to make this a single command.
 
 ## Doctor's mutation-safety contract
 

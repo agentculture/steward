@@ -92,57 +92,14 @@ def test_doctor_skills_convention_catches_name_mismatch(
 
 
 # --- _resolve_perfect_patient_path ----------------------------------------
-# The override path must live inside the workspace. .patients/ is the
-# documented gitignored location for review-mode baselines.
+# The output path is always derived from the steward checkout itself; there
+# is no caller-supplied path. (The previous `--perfect-patient-out` flag
+# was dropped — to regenerate against a different sibling set, clone that
+# workspace and run doctor from inside it.)
 
 
-def test_perfect_patient_path_default_is_workspace_relative(tmp_path: Path) -> None:
-    from argparse import Namespace
-
+def test_perfect_patient_path_is_steward_root_relative(tmp_path: Path) -> None:
     from steward.cli._commands.doctor import _resolve_perfect_patient_path
 
-    args = Namespace(perfect_patient_out=None)
-    out = _resolve_perfect_patient_path(args, tmp_path)
+    out = _resolve_perfect_patient_path(tmp_path)
     assert out == (tmp_path / "docs" / "perfect-patient.md").resolve()
-
-
-def test_perfect_patient_path_inside_workspace_accepted(tmp_path: Path) -> None:
-    """A user override that lands inside the workspace is honoured."""
-    from argparse import Namespace
-
-    from steward.cli._commands.doctor import _resolve_perfect_patient_path
-
-    target = tmp_path / ".patients" / "review.md"
-    args = Namespace(perfect_patient_out=target)
-    out = _resolve_perfect_patient_path(args, tmp_path)
-    assert out == target.resolve()
-
-
-def test_perfect_patient_path_outside_workspace_rejected(tmp_path: Path) -> None:
-    """A user override pointing outside the workspace is a user error."""
-    from argparse import Namespace
-
-    from steward.cli._commands.doctor import _resolve_perfect_patient_path
-    from steward.cli._errors import EXIT_USER_ERROR, StewardError
-
-    outside = tmp_path.parent / "elsewhere" / "out.md"
-    args = Namespace(perfect_patient_out=outside)
-    with pytest.raises(StewardError) as exc_info:
-        _resolve_perfect_patient_path(args, tmp_path)
-    err = exc_info.value
-    assert err.code == EXIT_USER_ERROR
-    assert "must point inside the workspace" in err.message
-    assert ".patients/" in err.remediation
-
-
-def test_perfect_patient_path_traversal_rejected(tmp_path: Path) -> None:
-    """`..` traversal that escapes the workspace is also rejected after resolve()."""
-    from argparse import Namespace
-
-    from steward.cli._commands.doctor import _resolve_perfect_patient_path
-    from steward.cli._errors import StewardError
-
-    # tmp_path/sub/../../escape resolves to tmp_path.parent/escape — outside.
-    args = Namespace(perfect_patient_out=tmp_path / "sub" / ".." / ".." / "escape.md")
-    with pytest.raises(StewardError):
-        _resolve_perfect_patient_path(args, tmp_path)

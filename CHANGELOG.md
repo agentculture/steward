@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-04-29
+
+### Added
+
+- docs note in CLAUDE.md and .gitignore comment describing the planned --from-github URL workflow that will replace the override use case (clone the URL into .patients/<slug>/, run --scope siblings against that clone).
+
+### Changed
+
+- doctor write paths are now derived from constants only: <steward_root>/docs/perfect-patient.md for the corpus baseline; <sibling>/docs/steward/steward-suggestions.md for per-sibling reports (with sibling paths from directory listing of --workspace-root, not free-form input). The clone-and-run pattern (`git clone X .patients/<slug>/` + `--workspace-root .patients/<slug>/`) is the supported workflow for regenerating against a different sibling set; --from-github URL will automate it.
+- tests/test_cli_doctor_siblings.py write-coverage test now builds a fake steward checkout inside tmp_path (git-init + vendored portability-lint.sh) so the regenerated baseline writes into tmp, never touching REPO_ROOT/docs/perfect-patient.md.
+
 ## [0.6.1] - 2026-04-29
 
 ### Fixed
