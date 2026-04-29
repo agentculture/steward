@@ -36,11 +36,38 @@ def _seed_sibling(workspace: Path, name: str, agents: list[dict]) -> Path:
     return repo
 
 
+def _seed_fake_steward_root(parent: Path) -> Path:
+    """Build the minimum directory tree that satisfies _resolve_steward_repo_root.
+
+    `_resolve_steward_repo_root` requires (1) a git checkout (it walks up
+    from cwd looking for `.git/`) and (2) the vendored portability-lint.sh
+    at the canonical relpath. Replicate both here, copying the real script
+    byte-for-byte so the tests exercise the actual file. Used to keep
+    `--scope siblings` write tests fully tmpdir-scoped — never polluting
+    the real REPO_ROOT/docs/perfect-patient.md.
+    """
+    import subprocess
+
+    fake_root = parent / "fake_steward"
+    scripts = fake_root / ".claude" / "skills" / "pr-review" / "scripts"
+    scripts.mkdir(parents=True)
+    real = REPO_ROOT / ".claude" / "skills" / "pr-review" / "scripts" / "portability-lint.sh"
+    (scripts / "portability-lint.sh").write_bytes(real.read_bytes())
+    (scripts / "portability-lint.sh").chmod(0o755)
+    # `_find_git_root` looks for `.git/`; init a bare repo to satisfy that.
+    subprocess.run(["git", "init", "-q", str(fake_root)], check=True)
+    return fake_root
+
+
 def test_doctor_siblings_writes_reports_and_perfect_patient(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Use a fake steward checkout inside tmp_path so the regenerated baseline
+    # writes into tmp, not into the real REPO_ROOT/docs/perfect-patient.md.
+    # Sibling workspace is a peer directory next to it.
+    fake_root = _seed_fake_steward_root(tmp_path)
     workspace = tmp_path / "ws"
     workspace.mkdir()
     _seed_sibling(workspace, "alpha", [{"suffix": "a", "backend": "claude"}])
@@ -52,11 +79,10 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
             {"suffix": "c", "backend": "acp"},
         ],
     )
-    pp_out = tmp_path / "perfect-patient.md"
 
-    # corpus mode resolves the steward checkout from cwd; run from the real one.
+    # corpus mode resolves the steward checkout from cwd; run from the fake one.
     cwd = os.getcwd()
-    os.chdir(REPO_ROOT)
+    os.chdir(fake_root)
     try:
         rc = main(
             [
@@ -65,8 +91,6 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
                 "siblings",
                 "--workspace-root",
                 str(workspace),
-                "--perfect-patient-out",
-                str(pp_out),
             ]
         )
     finally:
@@ -77,17 +101,28 @@ def test_doctor_siblings_writes_reports_and_perfect_patient(
     assert "doctor clinic" in captured.out
     assert "3 agent(s) across 2 repo(s)" in captured.out
 
-    # Each target now has the report file with the marker.
+    # All output now lives under .prescriptions/<slug>/ inside the fake
+    # steward checkout. Slug derives from workspace_root's basename ("ws").
+    prescription_dir = fake_root / ".prescriptions" / "ws"
+    assert prescription_dir.is_dir()
+
+    # Per-sibling reports live alongside the baseline, not inside the
+    # sibling repos themselves (doctor never writes into other repos).
     for repo_name in ("alpha", "beta"):
-        report = workspace / repo_name / _corpus.REPORT_RELPATH
-        assert report.is_file(), f"missing report for {repo_name}"
+        report = prescription_dir / repo_name / _corpus.REPORT_BASENAME
+        assert report.is_file(), f"missing prescription report for {repo_name}"
         text = report.read_text()
         assert _corpus.REPORT_MARKER_PREFIX in text
         assert "# Steward suggestions" in text
+        # Doctor must NOT have written into the sibling repo.
+        assert not (workspace / repo_name / "docs" / "steward").exists()
 
-    # perfect-patient.md got refreshed at the override location.
+    # perfect-patient.md is the prescription form, not the canonical doc.
+    pp_out = prescription_dir / _corpus.PERFECT_PATIENT_BASENAME
     assert pp_out.is_file()
     assert "# Perfect patient" in pp_out.read_text()
+    # And the canonical committed location is untouched.
+    assert not (fake_root / "docs" / "perfect-patient.md").exists()
 
 
 def test_doctor_siblings_json_output_is_parseable(
@@ -155,7 +190,11 @@ def test_doctor_siblings_no_write_skips_report_files(
 
     capsys.readouterr()  # drain output
     assert rc == 0
-    assert not (workspace / "alpha" / _corpus.REPORT_RELPATH).exists()
+    # No prescription dir should have been created anywhere because we
+    # passed both --no-write-reports and --no-refresh-perfect-patient.
+    assert not (REPO_ROOT / ".prescriptions" / "ws").exists()
+    # And doctor never writes into the sibling repos under any flag combo.
+    assert not (workspace / "alpha" / "docs" / "steward").exists()
 
 
 def test_doctor_siblings_empty_workspace_is_a_diagnostic(

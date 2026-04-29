@@ -104,7 +104,6 @@ QODO_INLINE=$(echo "$THREADS_JSON" | jq '[.[] | select((.comments.nodes[0].autho
 # Skip --paginate to avoid array concatenation; per_page=100 covers typical PRs.
 ISSUE=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments?per_page=100")
 QODO_ISSUE=$(echo "$ISSUE" | jq '[.[] | select((.user.login // "") | startswith("qodo"))] | length')
-SONARQUBE_ISSUE=$(echo "$ISSUE" | jq '[.[] | select((.user.login // "") | startswith("sonarqubecloud"))] | length')
 CFPAGES_ISSUE=$(echo "$ISSUE" | jq '[.[] | select((.user.login // "") | test("cloudflare"))] | length')
 COPILOT_TOPLEVEL=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews?per_page=100" \
     | jq '[.[] | select((.user.login // "") | startswith("copilot")) | select((.body // "") != "")] | length')

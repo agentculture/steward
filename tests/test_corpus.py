@@ -240,55 +240,33 @@ def test_skill_bullets_carry_frontmatter_descriptions(tmp_path: Path) -> None:
     assert "- `no-meta`\n" in body
 
 
-def test_write_repo_report_writes_marked_file(tmp_path: Path) -> None:
-    repo = tmp_path / "alpha"
-    repo.mkdir()
+def test_write_prescription_report_writes_to_target(tmp_path: Path) -> None:
+    target = tmp_path / "out" / "steward-suggestions.md"
     body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    path, status = _corpus.write_repo_report(repo, body)
-    assert status == "written"
-    assert path == repo / _corpus.REPORT_RELPATH
-    assert path.read_text().startswith("# Steward suggestions")
+    path = _corpus.write_prescription_report(target, body)
+    assert path == target
+    assert target.is_file()
+    assert target.read_text().startswith("# Steward suggestions")
 
 
-def test_write_repo_report_idempotent(tmp_path: Path) -> None:
-    repo = tmp_path / "alpha"
-    repo.mkdir()
-    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    _corpus.write_repo_report(repo, body)
-    path, status = _corpus.write_repo_report(repo, body)
-    assert status == "written"
-    assert path.read_text().count("# Steward suggestions") == 1
+def test_write_prescription_report_creates_parent_dirs(tmp_path: Path) -> None:
+    """The prescription dir tree may not yet exist on first run."""
+    target = tmp_path / "deeply" / "nested" / "dir" / "report.md"
+    body = "# x\n"
+    _corpus.write_prescription_report(target, body)
+    assert target.is_file()
 
 
-def test_write_repo_report_finds_marker_below_first_5_lines(tmp_path: Path) -> None:
-    """The marker scan covers the entire file — extra header lines (editor
-    banner, frontmatter, etc.) above the marker must NOT trigger the
-    skipped-unmanaged path."""
-    repo = tmp_path / "alpha"
-    target_dir = repo / "docs" / "steward"
-    target_dir.mkdir(parents=True)
-    target = target_dir / "steward-suggestions.md"
-    target.write_text(
-        "# Steward suggestions\n\n"
-        "<!-- editor banner line 1 -->\n"
-        "<!-- editor banner line 2 -->\n"
-        "<!-- editor banner line 3 -->\n"
-        "<!-- editor banner line 4 -->\n"
-        f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    )
-    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-02.\n"
-    _path, status = _corpus.write_repo_report(repo, body)
-    assert status == "written"
+def test_write_prescription_report_overwrites_without_complaint(tmp_path: Path) -> None:
+    """No 'preserve unmanaged hand-edits' branch — prescriptions are scratch."""
+    target = tmp_path / "report.md"
+    target.write_text("# stale content\n")
+    body = "# fresh content\n"
+    _corpus.write_prescription_report(target, body)
+    assert target.read_text() == "# fresh content\n"
 
 
-def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
-    repo = tmp_path / "alpha"
-    target_dir = repo / "docs" / "steward"
-    target_dir.mkdir(parents=True)
-    target = target_dir / "steward-suggestions.md"
-    target.write_text("# Hand-written notes\n\nDon't overwrite me.\n")
-
-    body = "# Steward suggestions\n\n" + f"{_corpus.REPORT_MARKER_PREFIX} on 2026-01-01.\n"
-    path, status = _corpus.write_repo_report(repo, body)
-    assert status == "skipped-unmanaged"
-    assert "Hand-written notes" in path.read_text()
+def test_write_prescription_report_appends_trailing_newline(tmp_path: Path) -> None:
+    target = tmp_path / "report.md"
+    _corpus.write_prescription_report(target, "no-newline")
+    assert target.read_text() == "no-newline\n"

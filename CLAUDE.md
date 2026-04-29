@@ -99,6 +99,76 @@ Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
 `pr-review`, etc.) are recorded in `docs/skill-sources.md` so `doctor` can
 vendor deterministically.
 
+`docs/perfect-patient.md` is the *canonical* baseline — committed,
+hand-curated. Doctor never overwrites it in place; it writes a fresh
+prescription form into the gitignored `.prescriptions/<slug>/` directory
+on every `--scope siblings` run, and you `diff` against the canonical
+when you want to see what changed.
+
+## Patients and prescriptions
+
+Doctor splits its read locations from its write locations:
+
+- **`docs/perfect-patient.md`** (committed) — the *canonical* baseline.
+  Hand-curated. Doctor never overwrites this file in place. It's the
+  reference other agents and tools check against; if you want to ratchet
+  what it says, edit it like any other doc.
+- **`.patients/<slug>/`** (gitignored) — input fixtures: clones of remote
+  workspaces. Today, `git clone <url> .patients/<slug>/` populates it
+  manually; the planned `--from-github URL` flag (see issue #10) will
+  automate that step.
+- **`.prescriptions/<slug>/`** (gitignored) — output: the regenerated
+  corpus baseline at `<prescription>/perfect-patient.md` plus per-sibling
+  reports at `<prescription>/<sibling-name>/steward-suggestions.md`.
+  Each doctor run writes a fresh prescription; nothing is preserved
+  across runs because nothing in the prescription dir was hand-edited.
+
+The slug is `_slug_from_workspace(workspace_root)` — a sanitised basename
+of the workspace path. Anything outside `[A-Za-z0-9._-]` collapses to a
+single dash, so the slug carries no path separators or traversal
+sequences and the prescription path is provably under
+`<steward_root>/.prescriptions/`.
+
+### Why this shape
+
+- Doctor never writes into other repos. Each sibling can pull their
+  report out of `.prescriptions/` if they want; doctor stops being
+  invasive across repo boundaries.
+- Doctor never reads its own output to merge with new content. No
+  read+write round-trip on the same file means no SonarCloud
+  `pythonsecurity:S2083` taint flow to mitigate.
+- Comparing prescription against canonical is a literal `diff`. If you
+  like what changed, copy the relevant sections in by hand.
+
+## Doctor's mutation-safety contract
+
+`docs/sibling-pattern.md` says "any write verb defaults to dry-run;
+`--apply` to commit". `steward doctor` distinguishes two kinds of write:
+
+- **Diagnostic outputs** — the prescription dir (corpus baseline +
+  per-sibling reports). These are derived artifacts about the *current*
+  state, scoped to a gitignored scratch dir; written by default,
+  skippable via `--no-refresh-perfect-patient` / `--no-write-reports`.
+- **Repairs** — actually mutating user state to fix an alignment gap
+  (creating a missing `scripts/` dir, vendoring `.markdownlint-cli2.yaml`,
+  etc.). These only happen under `steward doctor --apply`, which is on
+  the roadmap and not yet implemented.
+
+`--apply` is reserved for the second category. Don't gate diagnostic
+output writes behind it — the existing `--no-*` opt-outs already cover
+the "give me a pure read" case.
+
+## Quality gates
+
+Local checks (run before pushing — most are also CI jobs):
+
+- `uv run pytest -n auto -v` — Python tests.
+- `uv run steward doctor .` — self-alignment check (`portability` + `skills-convention`).
+- `bash .claude/skills/pr-review/scripts/portability-lint.sh` — diff-only path-leak / dotfile-ref scan.
+- `bats tests/shell/` — behavioral coverage for the shell scripts under `.claude/skills/*/scripts/`.
+- `shellcheck --severity=warning .claude/skills/*/scripts/*.sh` — static check for the same.
+- `uvx pre-commit run --all-files` — markdownlint + portability-lint as a pre-commit hook (install once with `uvx pre-commit install`).
+
 ## Working with Culture from here
 
 Steward will need to read or write Culture artifacts (agent definitions, server configs, mesh links). Useful entry points:

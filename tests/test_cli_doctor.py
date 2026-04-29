@@ -89,3 +89,39 @@ def test_doctor_skills_convention_catches_name_mismatch(
     assert rc == 1
     assert "frontmatter name 'wrong-name' != dir 'real-name'" in captured.err
     assert captured.out == ""
+
+
+# --- prescription dir resolver --------------------------------------------
+# Doctor's output path is always `<steward-root>/.prescriptions/<slug>/`
+# where slug is a sanitised basename of the workspace. No caller-supplied
+# path data flows into the construction.
+
+
+def test_prescription_dir_uses_workspace_basename_as_slug(tmp_path: Path) -> None:
+    from steward.cli._commands.doctor import _resolve_prescription_dir
+
+    workspace = tmp_path / "my-cool-workspace"
+    workspace.mkdir()
+    out = _resolve_prescription_dir(tmp_path, workspace)
+    assert out == (tmp_path / ".prescriptions" / "my-cool-workspace").resolve()
+
+
+def test_prescription_dir_sanitises_unsafe_basename_chars(tmp_path: Path) -> None:
+    """Anything outside [A-Za-z0-9._-] collapses to a single dash so the
+    slug can never contain path separators or traversal sequences."""
+    from steward.cli._commands.doctor import _resolve_prescription_dir
+
+    weird = tmp_path / "weird name with spaces"
+    weird.mkdir()
+    out = _resolve_prescription_dir(tmp_path, weird)
+    # 'weird name with spaces' -> 'weird-name-with-spaces'
+    assert out.name == "weird-name-with-spaces"
+    assert out.parent == (tmp_path / ".prescriptions").resolve()
+
+
+def test_prescription_dir_falls_back_when_basename_empty() -> None:
+    """A root-like path with no basename gets a deterministic fallback."""
+    from steward.cli._commands.doctor import _slug_from_workspace
+
+    # Path("/").name == ""
+    assert _slug_from_workspace(Path("/")) == "workspace"

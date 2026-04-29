@@ -1,0 +1,37 @@
+# Pre-commit hooks for docs safety.
+#
+# Two hooks, both reproducing what CI runs so contributors fail fast
+# locally instead of in a remote run:
+#
+# - markdownlint-cli2: enforces the rules in .markdownlint-cli2.yaml.
+# - portability-lint: rejects hard-coded /home/<user>/ paths and
+#   per-user ~/.<dotfile> config refs in committed docs/configs. The
+#   recurring class of bug PR #1 shipped four of.
+#
+# Install once: `uvx pre-commit install`
+# Run on demand: `uvx pre-commit run --all-files`
+
+repos:
+  # Pin to the same version CI installs (.github/workflows/tests.yml lint
+  # job uses markdownlint-cli2@0.21.0). Bumping locally without bumping
+  # CI — or vice versa — surfaces as false-pass / false-fail drift.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.21.0
+    hooks:
+      - id: markdownlint-cli2
+        args: ["--config", ".markdownlint-cli2.yaml"]
+
+  - repo: local
+    hooks:
+      - id: portability-lint
+        name: portability-lint (path-leak + per-user-dotfile scan)
+        # Pre-commit invokes hooks with the staged set, not the full
+        # diff-vs-HEAD (which would also catch unrelated unstaged work
+        # and unexpectedly block commits). Use --cached mode + the file
+        # list pre-commit selected.
+        entry: .claude/skills/pr-review/scripts/portability-lint.sh --cached
+        language: script
+        pass_filenames: true
+        # Limit to file types that can carry path leaks; the script
+        # does its own filtering but pre-commit needs a trigger set.
+        types_or: [markdown, yaml, toml, json, shell, python]

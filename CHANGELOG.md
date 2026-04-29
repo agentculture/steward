@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-29
+
+### Added
+
+- .prescriptions/ to .gitignore alongside .patients/. Both dirs are scratch — .patients/ for input fixtures (cloned remote workspaces), .prescriptions/ for output (each runs feedback).
+
+### Changed
+
+- doctor write surface: `--scope siblings` now writes into `<steward-root>/.prescriptions/<slug>/`, never into the steward checkout's committed `docs/` nor into other sibling repos. Per-sibling reports go to `<prescription>/<sibling-name>/steward-suggestions.md`; the regenerated corpus baseline goes to `<prescription>/perfect-patient.md`.
+- docs/perfect-patient.md is now hand-curated (canonical). Doctor never overwrites it; users diff the prescription form against the canonical to see corpus drift, then copy in changes they accept.
+
+### Fixed
+
+- pythonsecurity:S2083 BLOCKER (rounds 1-3 in this PR): the underlying read+write round-trip on docs/perfect-patient.md is gone, so theres no source-to-sink taint flow for Sonar to track.
+
+## [0.7.0] - 2026-04-29
+
+### Added
+
+- docs note in CLAUDE.md and .gitignore comment describing the planned `--from-github URL` workflow that will replace the override use case (clone the URL into `.patients/<slug>/`, run `--scope siblings` against that clone).
+
+### Changed
+
+- doctor write paths are now derived from constants only: `<steward_root>/docs/perfect-patient.md` for the corpus baseline; `<sibling>/docs/steward/steward-suggestions.md` for per-sibling reports (with sibling paths from directory listing of `--workspace-root`, not free-form input). The clone-and-run pattern (`git clone X .patients/<slug>/` + `--workspace-root .patients/<slug>/`) is the supported workflow for regenerating against a different sibling set; `--from-github URL` will automate it.
+- tests/test_cli_doctor_siblings.py write-coverage test now builds a fake steward checkout inside tmp_path (git-init + vendored portability-lint.sh) so the regenerated baseline writes into tmp, never touching REPO_ROOT/docs/perfect-patient.md.
+
+## [0.6.1] - 2026-04-29
+
+### Fixed
+
+- pythonsecurity:S2083 (round 2): _resolve_perfect_patient_path now re-anchors the user-supplied override to workspace via candidate.relative_to(workspace), so the returned path is structurally workspace + validated-relative-tail. This satisfies SonarCloud taint analysis, which did not recognize the previous is_relative_to() check as a sanitizer.
+- CI lint failure: black/isort formatting on the test files appended in earlier commits (auto-generated test blocks bypassed local format hooks).
+
+## [0.6.0] - 2026-04-29
+
+### Added
+
+- Workspace-confinement on --perfect-patient-out: paths outside the steward workspace are rejected at the CLI boundary with a remediation hint pointing at .patients/
+- Gitignored .patients/ directory at the workspace root for review-mode baselines you do not want committed
+- 4 new pytest cases covering _resolve_perfect_patient_path: default, inside-workspace, outside-workspace, and traversal rejection
+- CLAUDE.md sections: Workspace-confined writes (and .patients/), Doctor mutation-safety contract
+
+### Changed
+
+- docs/sibling-pattern.md mutation-safety row #5 distinguishes repair-mutation verbs (require --apply) from diagnostic outputs (write by default, skippable via --no-*); retires the contradiction Qodo flagged in PR #9 review
+- tests/test_cli_doctor_siblings.py uses .patients/ inside the real REPO_ROOT for the override-write smoke test, with try/finally cleanup
+
+## [0.5.0] - 2026-04-29
+
+### Added
+
+- bats test suite (51 cases) under tests/shell/ covering arity contracts of the 7 vendored skill scripts + portability-lint
+- pre-commit config (.pre-commit-config.yaml) wiring markdownlint-cli2 + portability-lint
+- CI jobs: doctor (steward eats own dogfood), shellcheck (severity=warning), bats
+- Marker-preserved manual-ratchet section in docs/perfect-patient.md (steward.cli._commands._corpus.merge_manual_ratchet)
+- CLAUDE.md Quality gates section listing all local checks; README.md Skill supplier role paragraph
+
+### Changed
+
+- portability-lint.sh now fails when working tree has untracked files but the diff vs HEAD is empty (caught a real near-miss in PR #8)
+- docs/perfect-patient.md restructured: corpus-derived header + Required/Recommended/Common sections, then a manual-ratchet block (preserved across regeneration) holding the curated Recommended/Optional/Conditional skill tiers
+
+### Fixed
+
+- pr-status.sh: removed unused SONARQUBE_ISSUE variable (shellcheck SC2034)
+- portability-lint.sh: silenced false-positive shellcheck SC2088 on intentional literal-tilde regex patterns
+
 ## [0.4.0] - 2026-04-29
 
 ### Added
