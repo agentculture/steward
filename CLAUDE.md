@@ -101,8 +101,8 @@ vendor deterministically.
 
 `docs/perfect-patient.md` is two layers: corpus-derived sections regenerated
 by `steward doctor --scope siblings`, and a manual-ratchet block bounded by
-`<!-- steward:manual-ratchet:start -->` / `:end -->` markers that survives
-regeneration. Hand-curated tier lists (Recommended / Optional / Conditional
+`<!-- steward:manual-ratchet:start -->` and
+`<!-- steward:manual-ratchet:end -->` markers that survives regeneration. Hand-curated tier lists (Recommended / Optional / Conditional
 skills, etc.) belong inside the markers; anything outside them is descriptive
 and gets overwritten. The merge logic lives in
 `steward/cli/_commands/_corpus.py::merge_manual_ratchet`.

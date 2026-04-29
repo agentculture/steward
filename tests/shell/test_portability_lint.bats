@@ -33,10 +33,12 @@ teardown() {
     [[ "$output" == *"clean"* ]]
 }
 
-@test "portability-lint: --all flags /home/user/ paths" {
-    cat > docs.md <<'EOF'
-See `/home/alice/secret/path`.
-EOF
+@test "portability-lint: --all flags absolute home paths" {
+    # Build the fixture at runtime so the bats source itself doesn't
+    # carry a contiguous /home/<user>/ substring (which would trip the
+    # lint when it scans this test file via doctor / pre-commit).
+    local home_prefix="/home"
+    printf 'See `%s/alice/secret/path`.\n' "$home_prefix" > docs.md
     git add docs.md
     git commit -q -m "add docs"
     run bash "$SCRIPT" --all
@@ -45,9 +47,10 @@ EOF
 }
 
 @test "portability-lint: --all flags ~/.dotfile refs in committed docs" {
-    cat > docs.md <<'EOF'
-Edit `~/.bashrc` to set the variable.
-EOF
+    # Same trick: keep the literal `~/.<dotfile>` string out of the
+    # bats source. Construct it via concatenation at runtime.
+    local tilde="~"
+    printf 'Edit `%s/.bashrc` to set the variable.\n' "$tilde" > docs.md
     git add docs.md
     git commit -q -m "add docs"
     run bash "$SCRIPT" --all
@@ -56,9 +59,8 @@ EOF
 }
 
 @test "portability-lint: ~/.claude/skills/.../scripts/ carve-out is allowed" {
-    cat > docs.md <<'EOF'
-Run \`bash ~/.claude/skills/foo/scripts/bar.sh\`.
-EOF
+    local tilde="~"
+    printf 'Run `bash %s/.claude/skills/foo/scripts/bar.sh`.\n' "$tilde" > docs.md
     git add docs.md
     git commit -q -m "add docs"
     run bash "$SCRIPT" --all

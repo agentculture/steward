@@ -656,11 +656,11 @@ def write_repo_report(
     """
     target = repo_path / REPORT_RELPATH
     if target.is_file() and not overwrite_unmanaged:
-        existing_text = target.read_text()
+        existing_text = target.read_text(encoding="utf-8")
         if REPORT_MARKER_PREFIX not in existing_text:
             return target, "skipped-unmanaged"
 
     target.parent.mkdir(parents=True, exist_ok=True)
     text = body if body.endswith("\n") else body + "\n"
-    target.write_text(text)
+    target.write_text(text, encoding="utf-8")
     return target, "written"

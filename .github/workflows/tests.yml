@@ -1,8 +1,11 @@
 name: Tests
 
 on:
+  # Run on every PR target, not just PRs against main, so stacked PRs
+  # (e.g. branch B opened against branch A while A is still in review)
+  # also pay through the full quality gate. Push events stay scoped to
+  # main since that's where SonarCloud / publish flow off of.
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
