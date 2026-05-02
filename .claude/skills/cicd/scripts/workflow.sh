@@ -66,8 +66,14 @@ case "$cmd" in
         bash "$SCRIPT_DIR/pr-comments.sh" "$PR"
         ;;
     wait-after-push)
-        PR="${1:?Usage: workflow.sh wait-after-push <PR>}"
-        bash "$SCRIPT_DIR/wait-and-check.sh" "$PR"
+        # Forward all remaining args (PR number plus any --wait/--repo
+        # flags wait-and-check.sh accepts) so docs that promise
+        # `--wait <secs>` actually work.
+        if [ $# -lt 1 ]; then
+            echo "Usage: workflow.sh wait-after-push <PR> [--wait SECS] [--repo OWNER/REPO]" >&2
+            exit 2
+        fi
+        bash "$SCRIPT_DIR/wait-and-check.sh" "$@"
         ;;
     await)
         PR="${1:?Usage: workflow.sh await <PR>}"

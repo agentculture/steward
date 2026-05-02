@@ -432,7 +432,10 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "",
         "## Recommended skills",
         "",
-        "Skills present in 30–80% of agent repos.",
+        "Skills present in 30–80% of agent repos, plus any names in",
+        "`PROMOTED_SKILLS` (see `steward/cli/_commands/_corpus.py`) —",
+        "promoted entries can appear below the 30% corpus threshold and",
+        "are intentional ratchets of the bar.",
         "",
     ]
     lines.extend(_skill_bullets(baseline.recommended_skills, baseline.skill_descriptions))
@@ -446,9 +449,11 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "`culture.yaml`. The `cicd` skill auto-applies the",
         "signature on review replies via `pr-reply.sh` (which calls",
         "`scripts/_resolve-nick.sh`, falling back to the git-repo",
-        "basename when no `culture.yaml` is present). PR descriptions",
-        "and issue comments are still authored by hand today — the",
-        "convention is the same, but no wrapper signs them for you yet.",
+        "basename when no `culture.yaml` is present). The `coordinate`",
+        "skill auto-applies a per-repo literal (e.g. `- steward (Claude)`)",
+        "to cross-repo issue posts. PR descriptions and in-repo issue",
+        "comments are still authored by hand today — the convention is",
+        "the same, but no wrapper signs them for you yet.",
         "",
         "## Common `CLAUDE.md` sections",
         "",
@@ -537,6 +542,20 @@ def score_agent_against_baseline(agent: Agent, baseline: Baseline) -> list[Agent
                 repo=agent.repo_name,
                 severity="warning",
                 message=f"missing baseline skill `{missing}`",
+            )
+        )
+    # Recommended skills get info-severity findings — same pattern as
+    # `score_culture_yaml_shape` does for recommended yaml fields. This
+    # is what makes ``PROMOTED_SKILLS`` an actual ratchet of the bar
+    # rather than a documentary-only entry in `perfect-patient.md`.
+    for missing in sorted(baseline.recommended_skills - skills):
+        findings.append(
+            AgentFinding(
+                check="agent-vs-baseline",
+                agent=agent.suffix,
+                repo=agent.repo_name,
+                severity="info",
+                message=f"missing recommended skill `{missing}` (30–80% of corpus or promoted)",
             )
         )
     for missing in sorted(baseline.required_claude_md_sections - sections):

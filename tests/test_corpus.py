@@ -143,6 +143,21 @@ def test_synthesize_baseline_promotes_curated_skills(tmp_path: Path) -> None:
         assert baseline.skill_descriptions[name] == default_desc
 
 
+def test_score_against_baseline_flags_missing_promoted_skill(tmp_path: Path) -> None:
+    """A repo missing a promoted skill (e.g. ``coordinate``) gets an
+    info-severity finding from ``score_agent_against_baseline``. Without
+    this, ``PROMOTED_SKILLS`` would only update perfect-patient.md and
+    never raise the actual scoring bar."""
+    promoted = next(iter(_corpus.PROMOTED_SKILLS))
+    _make_repo(tmp_path, "alpha", [{"suffix": "a", "backend": "claude"}], skills=[])
+    agents, _errors = _corpus.discover_agents(tmp_path)
+    baseline = _corpus.synthesize_baseline(agents)
+    findings = _corpus.score_agent_against_baseline(agents[0], baseline)
+    matching = [f for f in findings if promoted in f.message]
+    assert matching, f"expected a finding for missing promoted skill {promoted!r}"
+    assert matching[0].severity == "info"
+
+
 def test_synthesize_baseline_corpus_description_wins_over_promoted(tmp_path: Path) -> None:
     """If the corpus already has a description for a promoted skill, the
     corpus copy wins (so a downstream's own SKILL.md text is preserved)."""

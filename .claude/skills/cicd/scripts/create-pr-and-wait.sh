@@ -19,17 +19,16 @@ set -euo pipefail
 #   Any other flags pass through to `gh pr create` (e.g. --base, --reviewer).
 #
 # Behavior:
-#   1. `gh pr create` with the given title/body (and any passthrough flags).
+#   1. Stage the body to a tempfile and `gh pr create --body-file …` so
+#      large self-contained briefs don't hit the OS argv length limit.
 #   2. `sleep $WAIT_SECS` to give reviewers time to post.
-#   3. Run `pr-comments.sh <PR_NUMBER>` to dump inline + issue + review
-#      comments. Looks for the script in this directory first, then in the
-#      user's global ~/.claude/skills/pr-review/scripts/, then falls back to
-#      an inline `gh api` dump.
+#   3. Run the sibling `pr-comments.sh <PR_NUMBER>` (vendored next to this
+#      script) to dump inline + issue + review comments.
 #
 # Exit codes:
 #   0  PR created and feedback fetched (no judgment about whether feedback
 #      is clean — caller decides what to do with it).
-#   2  Bad usage (missing --title).
+#   2  Bad usage (missing --title, or no body source on a TTY).
 #   3  Could not parse PR number from `gh pr create` output.
 #   *  Whatever `gh pr create` or the comment-fetch step returns.
 
@@ -64,14 +63,24 @@ if [[ -z "$TITLE" ]]; then
     usage
 fi
 
+# Stage the body to a tempfile and pass `--body-file` to gh. Large
+# self-contained briefs can otherwise hit the OS argv length limit
+# (~128 KB) when passed via `--body "$BODY"`.
+TMP_BODY=$(mktemp -t cicd-create-pr-body.XXXXXX)
+trap 'rm -f "$TMP_BODY"' EXIT
+
 if [[ -n "$BODY_FILE" ]]; then
-    BODY=$(cat "$BODY_FILE")
+    cat "$BODY_FILE" > "$TMP_BODY"
+elif [[ ! -t 0 ]]; then
+    cat > "$TMP_BODY"
 else
-    BODY=$(cat)
+    echo "No --body-file given and stdin is a TTY — refusing to hang on cat." >&2
+    echo "Pass --body-file PATH or pipe the body in." >&2
+    exit 2
 fi
 
 # Step 1: create the PR
-PR_URL=$(gh pr create --title "$TITLE" --body "$BODY" "${PASSTHROUGH[@]}")
+PR_URL=$(gh pr create --title "$TITLE" --body-file "$TMP_BODY" "${PASSTHROUGH[@]}")
 echo "Created: $PR_URL"
 
 PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$' || true)
@@ -84,28 +93,8 @@ fi
 echo "Waiting ${WAIT_SECS}s for automated reviewers (qodo, copilot, sonarcloud)..."
 sleep "$WAIT_SECS"
 
-# Step 3: dump feedback
+# Step 3: dump feedback. The cicd skill always vendors pr-comments.sh
+# next to this script — no per-user $HOME fallback (would violate the
+# skills-portability rule).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_COMMENTS="$SCRIPT_DIR/pr-comments.sh"
-GLOBAL_COMMENTS="$HOME/.claude/skills/pr-review/scripts/pr-comments.sh"
-
-if [[ -x "$PROJECT_COMMENTS" ]]; then
-    bash "$PROJECT_COMMENTS" "$PR_NUM"
-elif [[ -x "$GLOBAL_COMMENTS" ]]; then
-    bash "$GLOBAL_COMMENTS" "$PR_NUM"
-else
-    # Fallback: inline gh api dump.
-    echo "Note: pr-comments.sh not found at $PROJECT_COMMENTS or $GLOBAL_COMMENTS — using inline gh api fallback." >&2
-    REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-    echo "════════════════ INLINE REVIEW COMMENTS ════════════════"
-    gh api "repos/$REPO/pulls/$PR_NUM/comments" --paginate \
-        --jq '.[] | "── ID: \(.id) ── \(.user.login) on \(.path):\(.original_line // .line // "?") ──\n\(.body)\n"'
-    echo ""
-    echo "════════════════ ISSUE COMMENTS ════════════════"
-    gh api "repos/$REPO/issues/$PR_NUM/comments" --paginate \
-        --jq '.[] | "── ID: \(.id) ── \(.user.login) ──\n\(.body)\n"'
-    echo ""
-    echo "════════════════ TOP-LEVEL REVIEWS ════════════════"
-    gh api "repos/$REPO/pulls/$PR_NUM/reviews" --paginate \
-        --jq '.[] | select((.body // "") != "") | "── ID: \(.id) ── \(.user.login) ── State: \(.state) ──\n\(.body)\n"'
-fi
+bash "$SCRIPT_DIR/pr-comments.sh" "$PR_NUM"
