@@ -417,6 +417,17 @@ def render_perfect_patient(baseline: Baseline) -> str:
     lines.extend(_skill_bullets(baseline.recommended_skills, baseline.skill_descriptions))
     lines += [
         "",
+        "## GitHub message signing",
+        "",
+        "Every message an agent posts on GitHub (PR descriptions, review",
+        "replies, issue comments) must be signed `- <nick> (Claude)`,",
+        "where `<nick>` is the first agent's `suffix` from the repo's",
+        "`culture.yaml`. The `pr-review` skill enforces this automatically",
+        "via `scripts/_resolve-nick.sh`, which falls back to the git-repo",
+        "basename when no `culture.yaml` is present. Hand-rolled",
+        "`gh pr create` and `gh issue comment` calls should follow the",
+        "same convention.",
+        "",
         "## Common `CLAUDE.md` sections",
         "",
         "Top-level `## …` headings present in ≥80% of agent repos.",

@@ -200,6 +200,8 @@ def test_render_perfect_patient_has_expected_sections(tmp_path: Path) -> None:
     assert "# Perfect patient" in body
     assert "Required `culture.yaml` fields" in body
     assert "Common skills baseline" in body
+    assert "## GitHub message signing" in body
+    assert "`- <nick> (Claude)`" in body
     assert "Corpus stats" in body
 
 

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-02
+
+### Added
+
+- `culture.yaml` for steward itself (`suffix: steward`) so it's discoverable in its own corpus.
+- `pr-review` skill: `_resolve-nick.sh` resolves the agent's nick from `culture.yaml`'s first agent `suffix`, falling back to the git-repo basename.
+- `pr-review` skill: `pr-reply.sh --print-body` flag emits the would-be POST body for tests / dry runs.
+- `perfect-patient.md`: new "GitHub message signing" section codifying the `- <nick> (Claude)` convention.
+
+### Changed
+
+- `pr-reply.sh` signs posts as `- <nick> (Claude)` instead of the static `- Claude`, so multi-agent PR threads identify which sibling spoke.
+- `pr-review` SKILL.md documents the new convention and its resolution chain.
+
 ## [0.4.0] - 2026-04-29
 
 ### Added
