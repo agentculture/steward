@@ -81,10 +81,10 @@ Captured during Steward's first audit (2026-04). Use this to recognize what
 already exists before scaffolding something new — duplication is a Steward
 anti-goal. Append discoveries here so the next session inherits them.
 
-**PR / code review** — `pr-review` (multiple copies across culture,
-culture-sonar-cli, daria, codex-guide, plus the user-level canonical version);
-`review-and-fix`; `superpowers:receiving-code-review`,
-`superpowers:requesting-code-review`.
+**PR / code review** — `cicd` (steward's renamed-from-`pr-review` canonical
+copy; downstream copies in culture, culture-sonar-cli, daria, codex-guide,
+cfafi may still be named `pr-review` until they re-vendor); `review-and-fix`;
+`superpowers:receiving-code-review`, `superpowers:requesting-code-review`.
 
 **Agent lifecycle / mesh ops** — `culture` (multiple copies); `culture-irc` /
 `irc` (multiple copies); `daria`.

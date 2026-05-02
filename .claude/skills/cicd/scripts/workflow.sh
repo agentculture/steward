@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Steward pr-review workflow entry point.
+# Steward cicd workflow entry point (renamed from pr-review in 0.7.0).
 #
 # Subcommands:
-#   lint              run the portability lint on the current diff (staged + unstaged)
-#   poll <PR>         fetch and display review comments
-#   await <PR>        sleep 5 min, then check CI + SonarCloud + all comments;
-#                     exits non-zero on SonarCloud ERROR or unresolved threads.
-#                     Override the wait with STEWARD_PR_AWAIT_SECONDS=<n>.
-#   reply <PR>        batch reply to review comments (JSONL on stdin), --resolve
-#   delta             dump CLAUDE.md head + culture.yaml for each sibling project
-#                     listed in skills.local.yaml (alignment-delta check)
-#   help              print this message
+#   lint                    run the portability lint on the current diff (staged + unstaged)
+#   open-pr [gh pr flags]   gh pr create + sleep 180s + fetch reviewer comments.
+#                           Use right after pushing the initial branch.
+#                           Override the wait with --wait <secs>.
+#   poll <PR>               fetch and display review comments
+#   wait-after-push <PR>    sleep 180s then re-fetch comments. Use after pushing fixes.
+#                           Override the wait with --wait <secs>.
+#   await <PR>              sleep 5 min, then check CI + SonarCloud + all comments;
+#                           exits non-zero on SonarCloud ERROR or unresolved threads.
+#                           Override the wait with STEWARD_PR_AWAIT_SECONDS=<n>.
+#   reply <PR>              batch reply to review comments (JSONL on stdin), --resolve
+#   delta                   dump CLAUDE.md head + culture.yaml for each sibling project
+#                           listed in skills.local.yaml (alignment-delta check)
+#   help                    print this message
 
 set -euo pipefail
 
@@ -53,9 +58,22 @@ case "$cmd" in
     lint)
         bash "$SCRIPT_DIR/portability-lint.sh"
         ;;
+    open-pr)
+        bash "$SCRIPT_DIR/create-pr-and-wait.sh" "$@"
+        ;;
     poll)
         PR="${1:?Usage: workflow.sh poll <PR>}"
         bash "$SCRIPT_DIR/pr-comments.sh" "$PR"
+        ;;
+    wait-after-push)
+        # Forward all remaining args (PR number plus any --wait/--repo
+        # flags wait-and-check.sh accepts) so docs that promise
+        # `--wait <secs>` actually work.
+        if [ $# -lt 1 ]; then
+            echo "Usage: workflow.sh wait-after-push <PR> [--wait SECS] [--repo OWNER/REPO]" >&2
+            exit 2
+        fi
+        bash "$SCRIPT_DIR/wait-and-check.sh" "$@"
         ;;
     await)
         PR="${1:?Usage: workflow.sh await <PR>}"
@@ -146,7 +164,7 @@ case "$cmd" in
         [ "$any" -eq 0 ] && echo "(no sibling_projects configured in $CFG)"
         ;;
     help|--help|-h)
-        sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
+        sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
         ;;
     *)
         echo "unknown subcommand: $cmd" >&2

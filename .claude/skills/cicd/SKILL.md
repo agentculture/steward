@@ -1,15 +1,17 @@
 ---
-name: pr-review
+name: cicd
 description: >
-  Steward-specific PR workflow: branch, commit, push, PR, wait for Qodo/Copilot,
-  triage, fix, reply, resolve. Adds a portability lint (no absolute /home paths,
-  no per-user dotfile refs in committed docs), an alignment-delta check when
-  CLAUDE.md or culture.yaml change, and greenfield-aware test/version-bump
-  steps. Use when: creating PRs in steward, handling review feedback, or the
-  user says "create PR", "review comments", "address feedback", "resolve threads".
+  Steward's CI/CD lane: open PR (auto-wait for Qodo/Copilot), push fixes
+  (re-poll bots), triage feedback, reply, resolve. Adds a portability lint
+  (no absolute /home paths, no per-user dotfile refs in committed docs),
+  an alignment-delta check when CLAUDE.md or culture.yaml change, and
+  greenfield-aware test/version-bump steps. Use when: creating PRs in
+  steward, handling review feedback, polling CI status, or the user says
+  "create PR", "review comments", "address feedback", "resolve threads".
+  Renamed from `pr-review` in steward 0.7.0.
 ---
 
-# PR Review — Steward edition
+# CI/CD — Steward edition
 
 Steward's PRs touch agent prompts, `culture.yaml` configs, and cross-project
 guidance. The generic `pr-review` skills don't know that, so they miss two
@@ -21,8 +23,8 @@ classes of bugs Steward keeps producing:
   home directory in repo guidance, breaking reproducibility for other
   contributors and CI.
 
-This skill specializes Culture's `pr-review` to catch both up front, plus an
-alignment-delta step when Steward-affecting files change. The workflow is
+This skill specializes Culture's `pr-review` flow to catch both up front, plus
+an alignment-delta step when Steward-affecting files change. The workflow is
 encapsulated in `scripts/workflow.sh` — follow that, not a manual checklist.
 
 ## Prerequisites
@@ -32,7 +34,7 @@ Hard requirements: `gh` (GitHub CLI), `jq`, `bash`, `python3` (stdlib only),
 
 Soft requirement: `PyYAML` is needed **only for suffix mode** of the sibling
 `agent-config` skill, where it parses Culture's server manifest. Path mode
-and every `pr-review` script work without it. If suffix mode runs without
+and every `cicd` script work without it. If suffix mode runs without
 PyYAML it exits with a clear install hint.
 
 Per-machine paths (sibling-project layout) live in
@@ -45,8 +47,10 @@ Per-machine paths (sibling-project layout) live in
 | Command | Purpose |
 |---------|---------|
 | `workflow.sh lint` | Portability lint on the current diff (staged + unstaged). |
+| `workflow.sh open-pr --title T [--body-file F] [--wait SECS] [...]` | `gh pr create` then sleep 180s (or `--wait SECS`) and fetch reviewer comments in one shot. Use after pushing the initial branch. |
 | `workflow.sh poll <PR>` | Fetch and display all review comments. |
-| `workflow.sh await <PR>` | Sleep 5 minutes (or `STEWARD_PR_AWAIT_SECONDS=<n>`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (Qodo / Copilot / SonarCloud / CF Pages comments). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Canonical post-`gh pr create` step. |
+| `workflow.sh wait-after-push <PR> [--wait SECS]` | Sleep 180s (or `--wait SECS`) then re-fetch comments. Use after pushing fixes. |
+| `workflow.sh await <PR>` | Sleep 5 minutes (or `STEWARD_PR_AWAIT_SECONDS=<n>`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (Qodo / Copilot / SonarCloud / CF Pages comments). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Canonical post-`gh pr create` step when SonarCloud is wired up; lighter-weight `open-pr` is the default for greenfield. |
 | `workflow.sh delta` | Dump each sibling project's `CLAUDE.md` head + `culture.yaml`. |
 | `workflow.sh reply <PR>` | Batch reply (JSONL on stdin) and resolve threads. |
 | `workflow.sh help` | Print this list. |
@@ -59,14 +63,14 @@ next to `workflow.sh` and are usable directly when batching isn't appropriate.
 ```text
 git checkout -b <type>/<desc>
 # ... edit ...
-.claude/skills/pr-review/scripts/workflow.sh lint
+.claude/skills/cicd/scripts/workflow.sh lint
 git commit -am "..." && git push -u origin <branch>
 gh pr create --title "..." --body "..."   # title <70 chars, body signed "- <nick> (Claude)"
-.claude/skills/pr-review/scripts/workflow.sh await <PR>   # 5-min wait, then CI + SonarCloud + all comments
+.claude/skills/cicd/scripts/workflow.sh await <PR>   # 5-min wait, then CI + SonarCloud + all comments
 # triage; if CLAUDE.md/culture.yaml/.claude/skills changed:
-.claude/skills/pr-review/scripts/workflow.sh delta
+.claude/skills/cicd/scripts/workflow.sh delta
 # fix, re-lint, push
-.claude/skills/pr-review/scripts/workflow.sh reply <PR> < replies.jsonl
+.claude/skills/cicd/scripts/workflow.sh reply <PR> < replies.jsonl
 gh pr checks <PR>
 # Wait for human merge — never merge yourself.
 ```

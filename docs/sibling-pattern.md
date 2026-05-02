@@ -73,7 +73,7 @@ is expected to grow into.
   `/home/<user>/...` paths in tracked files; no `~/.<dotfile>` config refs in
   committed `.md`/`.yaml`/`.toml`/`.json`/`.jsonc` outside the carve-outs
   (`~/.claude/skills/.../scripts/`, `~/.culture/`).
-  *Source:* `.claude/skills/pr-review/scripts/portability-lint.sh`.
+  *Source:* `.claude/skills/cicd/scripts/portability-lint.sh`.
 - **skills-convention** *(implemented as `--check skills-convention`)* —
   every `.claude/skills/<name>/SKILL.md` has a sibling
   `.claude/skills/<name>/scripts/` directory, **and** the SKILL.md frontmatter

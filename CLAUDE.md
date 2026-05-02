@@ -75,7 +75,7 @@ folded into doctor) and corpus mode (the agent-iteration flow). The
   selected checks, then exits non-zero if any finding was reported.
   Human-readable findings go to stderr; `--json` emits the structured
   findings list to stdout. Today: `portability` (runs steward's own
-  vendored `.claude/skills/pr-review/scripts/portability-lint.sh` against
+  vendored `.claude/skills/cicd/scripts/portability-lint.sh` against
   the target, so the target doesn't need to vendor it) and
   `skills-convention` (every `SKILL.md` has a sibling `scripts/`
   entry-point and matching frontmatter `name`).
@@ -96,8 +96,8 @@ folded into doctor) and corpus mode (the agent-iteration flow). The
   than re-implementing it.
 
 Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
-`pr-review`, etc.) are recorded in `docs/skill-sources.md` so `doctor` can
-vendor deterministically.
+`cicd`, `coordinate`, etc.) are recorded in `docs/skill-sources.md` so
+`doctor` can vendor deterministically.
 
 ## Working with Culture from here
 

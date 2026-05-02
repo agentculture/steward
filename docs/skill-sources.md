@@ -1,9 +1,10 @@
 # Skill supplier — canonical skills
 
 Steward acts as the **skill supplier** for the AgentCulture mesh: it owns the
-canonical copy of most cross-sibling skills (`pr-review`, `version-bump`,
+canonical copy of most cross-sibling skills (`cicd`, `version-bump`,
 `run-tests`, `gh-issues`, `notebooklm`, `sonarclaude`, `pypi-maintainer`,
-`agent-config`, `discord-notify`, `jekyll-test`, `doc-test-alignment`).
+`agent-config`, `discord-notify`, `jekyll-test`, `doc-test-alignment`,
+`coordinate`).
 Siblings copy those skills into their own `.claude/skills/` and may modify
 them. Nothing imports across repos at runtime — this is the **cite,
 don't import** pattern: each consumer owns and may diverge from its copy.
@@ -24,7 +25,8 @@ codebase does not yet read this file.
 | `gh-issues` | `steward` (`.claude/skills/gh-issues/`) | — | Wraps `gh issue view` with comments + body; `--repo` overrides the auto-detected repo. |
 | `jekyll-test` | `steward` (`.claude/skills/jekyll-test/`) | — | Conditional — only meaningful for siblings that ship a Jekyll / Pages / Cloudflare Pages site (detected via `_config.yml`). |
 | `notebooklm` | `steward` (`.claude/skills/notebooklm/`) | — | Generates GitHub blob URLs for repo docs; auto-detects branch + remote. |
-| `pr-review` | `steward` (`.claude/skills/pr-review/`) | `cfafi` (variant) | Steward owns the canonical workflow; downstream copies may add reviewer-specific wiring (Qodo/Copilot, etc.). |
+| `cicd` | `steward` (`.claude/skills/cicd/`) | `cfafi` (still named `pr-review`), `culture` (still named `pr-review`) | Steward owns the canonical workflow; renamed from `pr-review` in steward 0.7.0. Downstream copies may keep the old name on their own cadence and may add reviewer-specific wiring (Qodo/Copilot, etc.). |
+| `coordinate` | `steward` (`.claude/skills/coordinate/`) | `culture` | Cross-repo coordination: file issues / hand off briefs to sibling-repo agents. Each consumer hard-codes its own signature literal. |
 | `pypi-maintainer` | `steward` (`.claude/skills/pypi-maintainer/`) | — | Switches a PyPI package install between pypi / test-pypi / local. Generalised from the original culture-specific `change-package`. |
 | `run-tests` | `steward` (`.claude/skills/run-tests/`) | — | Coverage source resolves from `[tool.coverage.run]` in `pyproject.toml`, so the script is portable across siblings without modification. |
 | `sonarclaude` | `steward` (`.claude/skills/sonarclaude/`) | — | SonarCloud API client. Project key resolves from `$SONAR_PROJECT` or `--project KEY`. |
@@ -41,8 +43,9 @@ codebase does not yet read this file.
   auto-update. `steward doctor --skill <name>` is the intended re-sync path
   (TBD).
 - **Diverge intentionally.** A downstream copy may diverge for repo-specific
-  reasons (e.g. `cfafi`'s `pr-review` adds CloudFlare-API reviewers). Record
-  the divergence in the downstream `SKILL.md`'s frontmatter `description`.
+  reasons (e.g. `cfafi`'s `cicd` / `pr-review` adds CloudFlare-API reviewers).
+  Record the divergence in the downstream `SKILL.md`'s frontmatter
+  `description`.
 
 ## When a skill should be promoted upstream
 

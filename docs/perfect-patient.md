@@ -30,8 +30,12 @@ None yet.
 
 ## Recommended skills
 
-Skills present in 30–80% of agent repos.
+Skills present in 30–80% of agent repos, plus any names in
+`PROMOTED_SKILLS` (see `steward/cli/_commands/_corpus.py`) —
+promoted entries can appear below the 30% corpus threshold and
+are intentional ratchets of the bar.
 
+- `coordinate` — Cross-repo coordination from culture: file issues, post comments, and hand off briefs to sibling-repo agents (agentirc, future culture-agent / culture-bot).
 - `pr-review` — agentpypi PR workflow: branch, commit, push, PR, wait for Qodo/Copilot, triage, fix, reply, resolve.
 - `run-tests` — Run pytest with parallel execution and coverage.
 - `version-bump` — Bump the semver version in pyproject.toml (major, minor, or patch) and prepend a Keep-a-Changelog entry to CHANGELOG.md.
@@ -41,12 +45,14 @@ Skills present in 30–80% of agent repos.
 Every message an agent posts on GitHub (PR descriptions, review
 replies, issue comments) should be signed `- <nick> (Claude)`,
 where `<nick>` is the first agent's `suffix` from the repo's
-`culture.yaml`. The `pr-review` skill auto-applies the
+`culture.yaml`. The `cicd` skill auto-applies the
 signature on review replies via `pr-reply.sh` (which calls
 `scripts/_resolve-nick.sh`, falling back to the git-repo
-basename when no `culture.yaml` is present). PR descriptions
-and issue comments are still authored by hand today — the
-convention is the same, but no wrapper signs them for you yet.
+basename when no `culture.yaml` is present). The `coordinate`
+skill auto-applies a per-repo literal (e.g. `- steward (Claude)`)
+to cross-repo issue posts. PR descriptions and in-repo issue
+comments are still authored by hand today — the convention is
+the same, but no wrapper signs them for you yet.
 
 ## Common `CLAUDE.md` sections
 
