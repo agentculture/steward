@@ -50,7 +50,7 @@ def _require_git_and_script() -> None:
 def test_culture_yaml_first_agent_wins(tmp_path: Path) -> None:
     _git_init(tmp_path)
     (tmp_path / "culture.yaml").write_text(
-        "agents:\n" "- suffix: alpha\n" "  backend: claude\n" "- suffix: beta\n" "  backend: acp\n"
+        "agents:\n- suffix: alpha\n  backend: claude\n- suffix: beta\n  backend: acp\n"
     )
     assert _run(tmp_path) == "alpha"
 
@@ -72,11 +72,11 @@ def test_flat_root_shape_resolves_to_suffix(tmp_path: Path) -> None:
     so the regex can't be tightened to require list-prefix indentation.
     """
     _git_init(tmp_path)
-    (tmp_path / "culture.yaml").write_text("suffix: solo\n" "backend: claude\n")
+    (tmp_path / "culture.yaml").write_text("suffix: solo\nbackend: claude\n")
     assert _run(tmp_path) == "solo"
 
 
 def test_quoted_suffix_is_unwrapped(tmp_path: Path) -> None:
     _git_init(tmp_path)
-    (tmp_path / "culture.yaml").write_text("agents:\n" "- suffix: 'quoted'\n" "  backend: claude\n")
+    (tmp_path / "culture.yaml").write_text("agents:\n- suffix: 'quoted'\n  backend: claude\n")
     assert _run(tmp_path) == "quoted"
