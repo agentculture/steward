@@ -55,8 +55,12 @@ fi
 if [[ -z "$BODY" ]]; then
     if [[ -n "$BODY_FILE" ]]; then
         BODY="$(cat "$BODY_FILE")"
-    else
+    elif [[ ! -t 0 ]]; then
         BODY="$(cat)"
+    else
+        echo "No --body / --body-file given and stdin is a TTY — refusing to hang on cat." >&2
+        echo "Pass --body 'text', --body-file PATH, or pipe the body in." >&2
+        exit 2
     fi
 fi
 
