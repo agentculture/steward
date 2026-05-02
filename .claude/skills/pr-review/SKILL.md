@@ -61,7 +61,7 @@ git checkout -b <type>/<desc>
 # ... edit ...
 .claude/skills/pr-review/scripts/workflow.sh lint
 git commit -am "..." && git push -u origin <branch>
-gh pr create --title "..." --body "..."   # title <70 chars, body signed "- Claude"
+gh pr create --title "..." --body "..."   # title <70 chars, body signed "- <nick> (Claude)"
 .claude/skills/pr-review/scripts/workflow.sh await <PR>   # 5-min wait, then CI + SonarCloud + all comments
 # triage; if CLAUDE.md/culture.yaml/.claude/skills changed:
 .claude/skills/pr-review/scripts/workflow.sh delta
@@ -72,9 +72,13 @@ gh pr checks <PR>
 ```
 
 Branch naming: `fix/<desc>`, `feat/<desc>`, `docs/<desc>`, `skill/<name>`.
-Commit/PR signature: `- Claude` (workspace convention). The reply script
-auto-appends `- Claude` only if the body isn't already signed, so JSONL
-entries can include or omit it.
+PR / comment signature: `- <nick> (Claude)`, where `<nick>` comes from
+the agent's own `culture.yaml` — first agent's `suffix` — falling back
+to the git-repo basename when no `culture.yaml` is present. The reply
+script resolves this via `scripts/_resolve-nick.sh` and auto-appends the
+signature only when the body isn't already signed, so JSONL reply
+entries can include or omit it. Hand-rolled `gh pr create` and
+`gh issue comment` calls should follow the same convention.
 
 ## Triage rules
 

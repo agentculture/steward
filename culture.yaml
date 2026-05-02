@@ -1,0 +1,3 @@
+agents:
+- suffix: steward
+  backend: claude
