@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-05-03
+
+### Added
+
+- `scripts/mesh-message.sh` — thin wrapper around `culture channel message` for live mesh pings (unsigned: IRC nick is the speaker).
+- Per-channel signature rule in `communicate/SKILL.md`: GitHub issues auto-sign `- steward (Claude)`; mesh messages stay unsigned.
+
+### Changed
+
+- Renamed `coordinate` skill to `communicate` and broadened it to cover Culture mesh ops (`mesh-message.sh` alongside `post-issue.sh`).
+
 ## [0.7.0] - 2026-05-02
 
 ### Added

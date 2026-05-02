@@ -47,8 +47,12 @@ fi
 
 if [[ -n "$BODY_FILE" ]]; then
     cat "$BODY_FILE" > "$TMP_BODY"
-else
+elif [[ ! -t 0 ]]; then
     cat > "$TMP_BODY"
+else
+    echo "No --body-file given and stdin is a TTY — refusing to hang on cat." >&2
+    echo "Pass --body-file PATH or pipe the body in." >&2
+    exit 2
 fi
 
 # Append the signature.

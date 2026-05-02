@@ -96,7 +96,7 @@ folded into doctor) and corpus mode (the agent-iteration flow). The
   than re-implementing it.
 
 Per-skill upstreams (which repo owns the canonical copy of `version-bump`,
-`cicd`, `coordinate`, etc.) are recorded in `docs/skill-sources.md` so
+`cicd`, `communicate`, etc.) are recorded in `docs/skill-sources.md` so
 `doctor` can vendor deterministically.
 
 ## Working with Culture from here

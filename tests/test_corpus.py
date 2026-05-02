@@ -144,7 +144,7 @@ def test_synthesize_baseline_promotes_curated_skills(tmp_path: Path) -> None:
 
 
 def test_score_against_baseline_flags_missing_promoted_skill(tmp_path: Path) -> None:
-    """A repo missing a promoted skill (e.g. ``coordinate``) gets an
+    """A repo missing a promoted skill (e.g. ``communicate``) gets an
     info-severity finding from ``score_agent_against_baseline``. Without
     this, ``PROMOTED_SKILLS`` would only update perfect-patient.md and
     never raise the actual scoring bar."""
