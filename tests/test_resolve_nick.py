@@ -43,6 +43,8 @@ def _require_git_and_script() -> None:
         pytest.skip("resolve-nick script not present in this checkout")
     if shutil.which("git") is None:
         pytest.skip("git not available")
+    if shutil.which("bash") is None:
+        pytest.skip("bash not available")
 
 
 def test_culture_yaml_first_agent_wins(tmp_path: Path) -> None:
@@ -62,6 +64,23 @@ def test_falls_back_to_repo_basename_when_no_yaml(tmp_path: Path) -> None:
     repo.mkdir()
     _git_init(repo)
     assert _run(repo) == "my-agent"
+
+
+def test_flat_root_shape_resolves_to_suffix(tmp_path: Path) -> None:
+    """Single-agent repos can use a flat root-level manifest:
+
+        suffix: solo
+        backend: claude
+
+    instead of an `agents:` list. The resolver must still find `solo`
+    so the regex can't be tightened to require list-prefix indentation.
+    """
+    _git_init(tmp_path)
+    (tmp_path / "culture.yaml").write_text(
+        "suffix: solo\n"
+        "backend: claude\n"
+    )
+    assert _run(tmp_path) == "solo"
 
 
 def test_quoted_suffix_is_unwrapped(tmp_path: Path) -> None:

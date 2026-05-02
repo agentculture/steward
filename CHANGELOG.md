@@ -9,7 +9,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `culture.yaml` for steward itself (`suffix: steward`) so it's discoverable in its own corpus.
+- `culture.yaml` for steward itself (`suffix: steward`) so the in-repo `_resolve-nick.sh` finds the nick via the standard path instead of the basename fallback. (The corpus walker still skips the steward repo by name, by design.)
 - `pr-review` skill: `_resolve-nick.sh` resolves the agent's nick from `culture.yaml`'s first agent `suffix`, falling back to the git-repo basename.
 - `pr-review` skill: `pr-reply.sh --print-body` flag emits the would-be POST body for tests / dry runs.
 - `perfect-patient.md`: new "GitHub message signing" section codifying the `- <nick> (Claude)` convention.
