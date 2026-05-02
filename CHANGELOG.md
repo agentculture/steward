@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-02
+
+### Added
+
+- `pr-review` skill: `workflow.sh await <PR>` subcommand — sleeps 5 minutes
+  (or `STEWARD_PR_AWAIT_SECONDS=<n>`), then runs `pr-status.sh` (CI checks,
+  SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh`
+  (Qodo / Copilot / SonarCloud / CF Pages comments). Exits non-zero on
+  SonarCloud `ERROR` or unresolved threads. Replaces the old
+  `sleep 300 && workflow.sh poll <PR>` two-step in the SKILL.md flow so a
+  Claude following the skill no longer misses SonarCloud findings.
+
+### Changed
+
+- README.md: rewritten as a public-facing introduction to steward's role —
+  sibling-pattern owner, perfect-patient maintainer, skill supplier — with a
+  mermaid architecture diagram, real `steward show` / `steward doctor` /
+  `steward doctor --scope siblings` sample output, and a status table for
+  implemented checks vs planned repair automation. Closes
+  [#11](https://github.com/agentculture/steward/issues/11).
+- docs/sibling-pattern.md: defines "sibling repo" up front and adds a
+  "Perfect patient" subsection clarifying which baseline sections regenerate
+  vs are manually curated.
+- docs/skill-sources.md: retitled "Skill supplier — canonical skills" with a
+  framing intro on the cite-don't-import vendoring model.
+
 ## [0.4.0] - 2026-04-29
 
 ### Added

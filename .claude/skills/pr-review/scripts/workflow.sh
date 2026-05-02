@@ -4,6 +4,9 @@
 # Subcommands:
 #   lint              run the portability lint on the current diff (staged + unstaged)
 #   poll <PR>         fetch and display review comments
+#   await <PR>        sleep 5 min, then check CI + SonarCloud + all comments;
+#                     exits non-zero on SonarCloud ERROR or unresolved threads.
+#                     Override the wait with STEWARD_PR_AWAIT_SECONDS=<n>.
 #   reply <PR>        batch reply to review comments (JSONL on stdin), --resolve
 #   delta             dump CLAUDE.md head + culture.yaml for each sibling project
 #                     listed in skills.local.yaml (alignment-delta check)
@@ -54,6 +57,36 @@ case "$cmd" in
         PR="${1:?Usage: workflow.sh poll <PR>}"
         bash "$SCRIPT_DIR/pr-comments.sh" "$PR"
         ;;
+    await)
+        PR="${1:?Usage: workflow.sh await <PR>}"
+        WAIT="${STEWARD_PR_AWAIT_SECONDS:-300}"
+        echo "→ waiting ${WAIT}s for Qodo / Copilot / SonarCloud to post …" >&2
+        sleep "$WAIT"
+        echo "── pr-status ─────────────────────────────────────────────────────────" >&2
+        STATUS_OUT=$(bash "$SCRIPT_DIR/pr-status.sh" "$PR" 2>&1) || true
+        printf '%s\n' "$STATUS_OUT"
+        echo "── pr-comments ───────────────────────────────────────────────────────" >&2
+        bash "$SCRIPT_DIR/pr-comments.sh" "$PR" || true
+        # Decide pass/fail from the captured pr-status.sh output. Markers:
+        #   • "SonarCloud ❌ Quality Gate ERROR" → SonarCloud failed
+        #   • "Unresolved: N" with N>0 → unresolved review threads
+        SONAR_FAIL=0
+        UNRESOLVED=0
+        if printf '%s\n' "$STATUS_OUT" | grep -qE 'SonarCloud[[:space:]]+❌[[:space:]]+Quality Gate ERROR'; then
+            SONAR_FAIL=1
+        fi
+        if PENDING=$(printf '%s\n' "$STATUS_OUT" | grep -oE 'Unresolved:[[:space:]]+[0-9]+' | grep -oE '[0-9]+$' | head -1); then
+            [ -n "${PENDING:-}" ] && [ "$PENDING" -gt 0 ] && UNRESOLVED=1
+        fi
+        if [ "$SONAR_FAIL" -eq 1 ] || [ "$UNRESOLVED" -eq 1 ]; then
+            echo >&2
+            [ "$SONAR_FAIL" -eq 1 ] && echo "✗ SonarCloud quality gate ERROR" >&2
+            [ "$UNRESOLVED" -eq 1 ] && echo "✗ ${PENDING} unresolved review thread(s)" >&2
+            exit 1
+        fi
+        echo >&2
+        echo "✓ no SonarCloud ERROR, no unresolved threads" >&2
+        ;;
     reply)
         PR="${1:?Usage: workflow.sh reply <PR>  (JSONL on stdin)}"
         bash "$SCRIPT_DIR/pr-batch.sh" --resolve "$PR"
@@ -89,7 +122,7 @@ case "$cmd" in
         [ "$any" -eq 0 ] && echo "(no sibling_projects configured in $CFG)"
         ;;
     help|--help|-h)
-        sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
+        sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
         ;;
     *)
         echo "unknown subcommand: $cmd" >&2
