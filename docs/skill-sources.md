@@ -11,8 +11,10 @@ don't import** pattern: each consumer owns and may diverge from its copy.
 This file is the deterministic upstream/downstream map. Each skill has
 exactly one canonical source repo (the **upstream** column). Other repos
 hold downstream copies that may lag and should periodically re-sync from
-upstream. `steward doctor` consults this file when vendoring a skill into
-a target sibling so the choice is unambiguous.
+upstream. The planned `steward doctor --apply` mode will consult this file
+when vendoring a skill into a target sibling so the choice is unambiguous;
+today the map is human-readable only — `--apply` is on the roadmap and the
+codebase does not yet read this file.
 
 | Skill | Upstream | Downstream copies (known) | Notes |
 |-------|----------|---------------------------|-------|

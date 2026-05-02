@@ -62,11 +62,35 @@ case "$cmd" in
         WAIT="${STEWARD_PR_AWAIT_SECONDS:-300}"
         echo "→ waiting ${WAIT}s for Qodo / Copilot / SonarCloud to post …" >&2
         sleep "$WAIT"
+        # pr-status.sh is the source of truth for the SonarCloud / unresolved
+        # markers we gate on, so its failure must propagate — otherwise we'd
+        # falsely claim "✓ no SonarCloud ERROR" when the check never ran.
+        # Use the if-form so `set -e` doesn't abort before we report the rc.
         echo "── pr-status ─────────────────────────────────────────────────────────" >&2
-        STATUS_OUT=$(bash "$SCRIPT_DIR/pr-status.sh" "$PR" 2>&1) || true
+        if STATUS_OUT=$(bash "$SCRIPT_DIR/pr-status.sh" "$PR" 2>&1); then
+            STATUS_RC=0
+        else
+            STATUS_RC=$?
+        fi
         printf '%s\n' "$STATUS_OUT"
+        if [ "$STATUS_RC" -ne 0 ]; then
+            echo >&2
+            echo "✗ pr-status.sh failed (exit $STATUS_RC) — cannot determine PR state" >&2
+            exit "$STATUS_RC"
+        fi
+        # pr-comments.sh is the user-visible thread dump — its failure is also
+        # a hard fail so reviewers don't go untriaged.
         echo "── pr-comments ───────────────────────────────────────────────────────" >&2
-        bash "$SCRIPT_DIR/pr-comments.sh" "$PR" || true
+        if bash "$SCRIPT_DIR/pr-comments.sh" "$PR"; then
+            COMMENTS_RC=0
+        else
+            COMMENTS_RC=$?
+        fi
+        if [ "$COMMENTS_RC" -ne 0 ]; then
+            echo >&2
+            echo "✗ pr-comments.sh failed (exit $COMMENTS_RC) — review threads not fetched" >&2
+            exit "$COMMENTS_RC"
+        fi
         # Decide pass/fail from the captured pr-status.sh output. Markers:
         #   • "SonarCloud ❌ Quality Gate ERROR" → SonarCloud failed
         #   • "Unresolved: N" with N>0 → unresolved review threads

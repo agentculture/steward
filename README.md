@@ -37,8 +37,9 @@ baseline, and the canonical copies of the skills that other siblings vendor.
 - You're starting a new AgentCulture sibling repo and want to know the shape it
   should wear.
 - You want to check whether an existing sibling still matches the pattern.
-- You want to refresh a sibling's vendored skill copies from the canonical
-  upstream.
+- You want to audit a sibling's vendored skill copies for drift against the
+  canonical upstream (the `--apply` repair mode that performs the refresh
+  itself is on the roadmap).
 - You're auditing the corpus to decide what the "common skills baseline"
   should be.
 

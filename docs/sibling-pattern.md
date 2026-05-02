@@ -34,8 +34,11 @@ It has two halves:
   run; hand edits are clobbered.
 - **Manually curated skills tier list** — recommended / optional / conditional
   skills. These are normative, not frequency-derived; they reflect the
-  steward-owned canonical skills and are preserved across regeneration via
-  marker comments in the file.
+  steward-owned canonical skills. Today the generator rewrites
+  `perfect-patient.md` wholesale on every `--scope siblings` run, so this
+  list is hand-maintained in steward and hand-edits to it elsewhere are
+  clobbered. Marker-splice preservation is on the roadmap (see steward's
+  `CLAUDE.md`).
 
 A sibling "matches the perfect patient" when its `culture.yaml`, `CLAUDE.md`,
 and `.claude/skills/` cover everything in both halves. Drift is reported in
