@@ -136,9 +136,9 @@ def test_synthesize_baseline_promotes_curated_skills(tmp_path: Path) -> None:
 
     assert _corpus.PROMOTED_SKILLS, "promoted-skills set must not be empty"
     for name, default_desc in _corpus.PROMOTED_SKILLS.items():
-        assert name in baseline.recommended_skills, (
-            f"{name!r} should be promoted into recommended_skills"
-        )
+        assert (
+            name in baseline.recommended_skills
+        ), f"{name!r} should be promoted into recommended_skills"
         # Default description is used when the corpus has nothing better.
         assert baseline.skill_descriptions[name] == default_desc
 
