@@ -50,9 +50,10 @@ NONE_PLACEHOLDER = "None yet."
 # when no SKILL.md frontmatter description is found in the corpus
 # (so a real downstream copy still wins).
 PROMOTED_SKILLS: dict[str, str] = {
-    "coordinate": (
-        "Cross-repo coordination: file issues and hand off briefs to "
-        "sibling-repo agents (auto-signed)."
+    "communicate": (
+        "Cross-repo + mesh communication: file issues / hand off briefs "
+        "to sibling-repo agents (auto-signed) and send live messages to "
+        "Culture mesh channels."
     ),
 }
 
@@ -449,9 +450,10 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "`culture.yaml`. The `cicd` skill auto-applies the",
         "signature on review replies via `pr-reply.sh` (which calls",
         "`scripts/_resolve-nick.sh`, falling back to the git-repo",
-        "basename when no `culture.yaml` is present). The `coordinate`",
+        "basename when no `culture.yaml` is present). The `communicate`",
         "skill auto-applies a per-repo literal (e.g. `- steward (Claude)`)",
-        "to cross-repo issue posts. PR descriptions and in-repo issue",
+        "to cross-repo issue posts; mesh messages it sends are unsigned",
+        "(the IRC nick is the speaker). PR descriptions and in-repo issue",
         "comments are still authored by hand today — the convention is",
         "the same, but no wrapper signs them for you yet.",
         "",
