@@ -46,6 +46,7 @@ Per-machine paths (sibling-project layout) live in
 |---------|---------|
 | `workflow.sh lint` | Portability lint on the current diff (staged + unstaged). |
 | `workflow.sh poll <PR>` | Fetch and display all review comments. |
+| `workflow.sh await <PR>` | Sleep 5 minutes (or `STEWARD_PR_AWAIT_SECONDS=<n>`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (Qodo / Copilot / SonarCloud / CF Pages comments). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Canonical post-`gh pr create` step. |
 | `workflow.sh delta` | Dump each sibling project's `CLAUDE.md` head + `culture.yaml`. |
 | `workflow.sh reply <PR>` | Batch reply (JSONL on stdin) and resolve threads. |
 | `workflow.sh help` | Print this list. |
@@ -61,8 +62,7 @@ git checkout -b <type>/<desc>
 .claude/skills/pr-review/scripts/workflow.sh lint
 git commit -am "..." && git push -u origin <branch>
 gh pr create --title "..." --body "..."   # title <70 chars, body signed "- <nick> (Claude)"
-sleep 300                                  # wait for Qodo + Copilot
-.claude/skills/pr-review/scripts/workflow.sh poll <PR>
+.claude/skills/pr-review/scripts/workflow.sh await <PR>   # 5-min wait, then CI + SonarCloud + all comments
 # triage; if CLAUDE.md/culture.yaml/.claude/skills changed:
 .claude/skills/pr-review/scripts/workflow.sh delta
 # fix, re-lint, push

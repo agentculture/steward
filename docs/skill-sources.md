@@ -1,12 +1,20 @@
-# Skill upstream sources
+# Skill supplier — canonical skills
 
-Each skill has exactly one canonical source repo. `steward doctor` consults
-this file when vendoring a skill into a target sibling so the choice is
-deterministic.
+Steward acts as the **skill supplier** for the AgentCulture mesh: it owns the
+canonical copy of most cross-sibling skills (`pr-review`, `version-bump`,
+`run-tests`, `gh-issues`, `notebooklm`, `sonarclaude`, `pypi-maintainer`,
+`agent-config`, `discord-notify`, `jekyll-test`, `doc-test-alignment`).
+Siblings copy those skills into their own `.claude/skills/` and may modify
+them. Nothing imports across repos at runtime — this is the **cite,
+don't import** pattern: each consumer owns and may diverge from its copy.
 
-When a skill exists in multiple repos, the **upstream** column wins. Other
-repos are downstream copies that may lag and should periodically re-sync from
-upstream.
+This file is the deterministic upstream/downstream map. Each skill has
+exactly one canonical source repo (the **upstream** column). Other repos
+hold downstream copies that may lag and should periodically re-sync from
+upstream. The planned `steward doctor --apply` mode will consult this file
+when vendoring a skill into a target sibling so the choice is unambiguous;
+today the map is human-readable only — `--apply` is on the roadmap and the
+codebase does not yet read this file.
 
 | Skill | Upstream | Downstream copies (known) | Notes |
 |-------|----------|---------------------------|-------|

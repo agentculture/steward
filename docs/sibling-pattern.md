@@ -1,8 +1,12 @@
 # AgentCulture sibling pattern
 
-The shape every AgentCulture sibling repo (`steward`, `cfafi`, `ghafi`, `daria`,
-…) is expected to wear. This document is the single source of truth that
-`steward doctor` consumes.
+A **sibling repo** is a Culture-mesh-adjacent project that wears a shared
+shape so agents (and humans) can move between repos without relearning the
+layout. Steward, `culture`, `daria`, `cfafi`, `ghafi`, and `afi-cli` are the
+current siblings; steward is itself a sibling and the reference exemplar.
+
+This document is the single source of truth for that shape — what every
+sibling is expected to ship and the invariants `steward doctor` enforces.
 
 The companion file `sibling-pattern.json` (TBD; emit from this doc) is the
 machine-readable form. Until it lands, the checks `doctor` runs are hard-coded
@@ -17,6 +21,29 @@ contract that those hard-coded checks are expected to honor.
   each declared agent against a corpus-derived baseline
   (`docs/perfect-patient.md`, regenerated on each run), and writes a per-target
   report into `<target>/docs/steward/steward-suggestions.md`.
+
+## Perfect patient
+
+The **perfect patient** is the corpus-derived baseline of what a healthy
+sibling looks like, materialised in [`perfect-patient.md`](perfect-patient.md).
+It has two halves:
+
+- **Frequency-derived sections** — required `culture.yaml` fields, recommended
+  fields, common skills baseline, and common `CLAUDE.md` headings. These are
+  regenerated wholesale from the corpus on every `steward doctor --scope siblings`
+  run; hand edits are clobbered.
+- **Manually curated skills tier list** — recommended / optional / conditional
+  skills. These are normative, not frequency-derived; they reflect the
+  steward-owned canonical skills. Today the generator rewrites
+  `perfect-patient.md` wholesale on every `--scope siblings` run, so this
+  list is hand-maintained in steward and hand-edits to it elsewhere are
+  clobbered. Marker-splice preservation is on the roadmap (see steward's
+  `CLAUDE.md`).
+
+A sibling "matches the perfect patient" when its `culture.yaml`, `CLAUDE.md`,
+and `.claude/skills/` cover everything in both halves. Drift is reported in
+the per-target `docs/steward/steward-suggestions.md` rather than as a CLI
+failure.
 
 ## Required artifacts
 
