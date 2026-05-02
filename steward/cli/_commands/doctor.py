@@ -35,7 +35,7 @@ from steward.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, StewardError
 from steward.cli._output import emit_diagnostic, emit_result
 
 FRONTMATTER_NAME_RE = re.compile(r"^name:\s*(\S+)\s*$", re.MULTILINE)
-PORTABILITY_LINT_RELPATH = Path(".claude/skills/pr-review/scripts/portability-lint.sh")
+PORTABILITY_LINT_RELPATH = Path(".claude/skills/cicd/scripts/portability-lint.sh")
 
 
 @dataclass
@@ -99,7 +99,7 @@ def _resolve_steward_portability_lint() -> Path:
     Anchors to the Steward checkout root via :func:`_resolve_steward_repo_root`,
     then returns ``<root>/<PORTABILITY_LINT_RELPATH>``. This guarantees the
     script we execute is the one shipped by Steward — not whatever
-    `.claude/skills/pr-review/scripts/portability-lint.sh` happens to live
+    `.claude/skills/cicd/scripts/portability-lint.sh` happens to live
     in an ancestor git checkout (e.g. a sibling Culture repo whose layout
     coincides with Steward's).
     """

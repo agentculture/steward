@@ -1,4 +1,4 @@
-"""Unit tests for the pr-review skill's signature behavior.
+"""Unit tests for the cicd skill's signature behavior.
 
 `pr-reply.sh --print-body` produces the exact body that would be POSTed
 to GitHub without making any network calls. Two branches matter:
@@ -15,14 +15,14 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = REPO_ROOT / ".claude" / "skills" / "pr-review" / "scripts" / "pr-reply.sh"
-RESOLVE = REPO_ROOT / ".claude" / "skills" / "pr-review" / "scripts" / "_resolve-nick.sh"
+SCRIPT = REPO_ROOT / ".claude" / "skills" / "cicd" / "scripts" / "pr-reply.sh"
+RESOLVE = REPO_ROOT / ".claude" / "skills" / "cicd" / "scripts" / "_resolve-nick.sh"
 
 
 @pytest.fixture(autouse=True)
 def _require_scripts() -> None:
     if not SCRIPT.exists() or not RESOLVE.exists():
-        pytest.skip("pr-review scripts not present in this checkout")
+        pytest.skip("cicd scripts not present in this checkout")
     if shutil.which("bash") is None:
         pytest.skip("bash not available")
 

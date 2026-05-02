@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-02
+
+### Added
+
+- New `coordinate` skill (`.claude/skills/coordinate/`, vendored from
+  culture). Wraps `gh issue create` with a self-contained-brief
+  convention and an auto-appended `- steward (Claude)` signature so a
+  steward agent can hand off work to a sibling-repo agent. Single
+  entry-point `scripts/post-issue.sh`.
+- `cicd` skill (formerly `pr-review`) gains two scripts vendored from
+  culture's PR-flow toolkit:
+  - `scripts/create-pr-and-wait.sh` — `gh pr create` + sleep 180s +
+    fetch reviewer comments in one shot, exposed as
+    `workflow.sh open-pr`.
+  - `scripts/wait-and-check.sh` — sleep 180s and re-fetch comments
+    after pushing fixes, exposed as `workflow.sh wait-after-push <PR>`.
+  Both honor a `--wait SECS` flag. Lighter-weight than the existing
+  `await` subcommand, which gates on SonarCloud + unresolved threads.
+- `_corpus.PROMOTED_SKILLS` — curated set of skill names that the
+  baseline ratchet always merges into the recommended skills,
+  regardless of corpus frequency. Initial member: `coordinate`.
+  Description default is used only when no corpus SKILL.md provides
+  one. Mirrors the 0.4.0 pattern of intentionally raising the bar.
+
+### Changed
+
+- **Renamed `pr-review` skill → `cicd`**. The directory moved (history
+  preserved via `git mv`); `doctor.py:38`'s
+  `PORTABILITY_LINT_RELPATH`, all docs, tests, and the
+  `.claude/skills/agent-config/SKILL.md` inventory line were updated.
+  `docs/skill-sources.md` records the rename and keeps `cfafi` and
+  `culture` listed as downstream copies that still carry the old
+  `pr-review` name on their own cadence (no breakage; downstream
+  consumers track the rename when they next vendor).
+- `docs/perfect-patient.md` regenerated. New `coordinate` entry under
+  recommended skills via the `PROMOTED_SKILLS` ratchet, and the
+  GitHub-signing block now references `cicd` instead of `pr-review`.
+
 ## [0.6.0] - 2026-05-02
 
 ### Added

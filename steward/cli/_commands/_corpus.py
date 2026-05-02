@@ -44,6 +44,18 @@ RECOMMENDED_THRESHOLD = 0.30
 # as a constant so the surface is single-sourced and matches in tests.
 NONE_PLACEHOLDER = "None yet."
 
+# Skills steward intentionally promotes to the recommended baseline
+# regardless of corpus frequency. Use sparingly — these become the bar
+# every sibling agent is scored against. The description is only used
+# when no SKILL.md frontmatter description is found in the corpus
+# (so a real downstream copy still wins).
+PROMOTED_SKILLS: dict[str, str] = {
+    "coordinate": (
+        "Cross-repo coordination: file issues and hand off briefs to "
+        "sibling-repo agents (auto-signed)."
+    ),
+}
+
 
 @dataclass
 class Agent:
@@ -357,6 +369,15 @@ def synthesize_baseline(agents: list[Agent]) -> Baseline:
     req_skills, rec_skills = _classify(skills_per_repo, len(repos))
     req_sec, rec_sec = _classify(sections_per_repo, len(repos))
 
+    # Ratchet: union promoted skills into the recommended set even when
+    # corpus frequency is below the threshold. Skills already classified
+    # as required (≥80%) keep that classification.
+    rec_skills = rec_skills | (set(PROMOTED_SKILLS) - req_skills)
+
+    descriptions = _corpus_skill_descriptions(agents)
+    for name, desc in PROMOTED_SKILLS.items():
+        descriptions.setdefault(name, desc)
+
     return Baseline(
         required_yaml_keys=req_keys,
         recommended_yaml_keys=rec_keys,
@@ -364,7 +385,7 @@ def synthesize_baseline(agents: list[Agent]) -> Baseline:
         recommended_skills=rec_skills,
         required_claude_md_sections=req_sec,
         recommended_claude_md_sections=rec_sec,
-        skill_descriptions=_corpus_skill_descriptions(agents),
+        skill_descriptions=descriptions,
         agent_count=len(agents),
         repo_count=len(repos),
     )
@@ -422,7 +443,7 @@ def render_perfect_patient(baseline: Baseline) -> str:
         "Every message an agent posts on GitHub (PR descriptions, review",
         "replies, issue comments) should be signed `- <nick> (Claude)`,",
         "where `<nick>` is the first agent's `suffix` from the repo's",
-        "`culture.yaml`. The `pr-review` skill auto-applies the",
+        "`culture.yaml`. The `cicd` skill auto-applies the",
         "signature on review replies via `pr-reply.sh` (which calls",
         "`scripts/_resolve-nick.sh`, falling back to the git-repo",
         "basename when no `culture.yaml` is present). PR descriptions",

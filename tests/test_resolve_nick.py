@@ -1,4 +1,4 @@
-"""Unit tests for the pr-review skill's nick-resolution script.
+"""Unit tests for the cicd skill's nick-resolution script.
 
 The script resolves the agent's nick from `culture.yaml` (first agent's
 `suffix`), falling back to the git-repo basename. Both branches and the
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPT = REPO_ROOT / ".claude" / "skills" / "pr-review" / "scripts" / "_resolve-nick.sh"
+SCRIPT = REPO_ROOT / ".claude" / "skills" / "cicd" / "scripts" / "_resolve-nick.sh"
 
 
 def _git_init(path: Path) -> None:

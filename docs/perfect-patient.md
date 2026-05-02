@@ -32,6 +32,7 @@ None yet.
 
 Skills present in 30–80% of agent repos.
 
+- `coordinate` — Cross-repo coordination from culture: file issues, post comments, and hand off briefs to sibling-repo agents (agentirc, future culture-agent / culture-bot).
 - `pr-review` — agentpypi PR workflow: branch, commit, push, PR, wait for Qodo/Copilot, triage, fix, reply, resolve.
 - `run-tests` — Run pytest with parallel execution and coverage.
 - `version-bump` — Bump the semver version in pyproject.toml (major, minor, or patch) and prepend a Keep-a-Changelog entry to CHANGELOG.md.
@@ -41,7 +42,7 @@ Skills present in 30–80% of agent repos.
 Every message an agent posts on GitHub (PR descriptions, review
 replies, issue comments) should be signed `- <nick> (Claude)`,
 where `<nick>` is the first agent's `suffix` from the repo's
-`culture.yaml`. The `pr-review` skill auto-applies the
+`culture.yaml`. The `cicd` skill auto-applies the
 signature on review replies via `pr-reply.sh` (which calls
 `scripts/_resolve-nick.sh`, falling back to the git-repo
 basename when no `culture.yaml` is present). PR descriptions
