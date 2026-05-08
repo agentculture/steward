@@ -61,58 +61,25 @@ next to `workflow.sh` and are usable directly when batching isn't appropriate.
 
 ## Polling for reviewer readiness
 
-Two modes, same looper (`scripts/poll-readiness.sh`). Both watch for:
+`scripts/poll-readiness.sh` watches a PR until its required reviewers post
+real (not placeholder) feedback, the PR closes, or an iteration cap fires.
+It fetches `gh api` JSON directly — never `pr-comments.sh` output — so
+truncation can't bias the gate. Default required set is qodo only
+(see header comments and `--help` for tunables, env vars, and the `qodo` /
+`copilot` heuristics; Copilot is detected but not required because its
+review bot is silent on agentculture repos in 2026). Heartbeats stream to
+stderr; the final headline is the only thing on stdout.
 
-- **qodo ready** — an issue comment whose body contains `Code Review by Qodo`
-  AND does NOT contain qodo's "still analysing" placeholder
-  (`Looking for bugs?`).
-- **Copilot ready** *(detected, not required by default)* — at least one
-  top-level review with a non-empty body.
+Two ways to drive it:
 
-Default required set is **qodo only** (`--require qodo`, override with
-`STEWARD_PR_REVIEWERS=qodo,copilot` or the `--require` flag). Copilot's
-PR-review bot stopped posting top-level reviews on agentculture repos in
-2026, so requiring it would make every wait TIMEOUT; the looper still
-*reports* Copilot status in the headline, just doesn't gate on it.
-Re-add `copilot` to `--require` if it starts posting again.
-
-The looper exits 0 the moment all required reviewers are ready (or the PR
-is `MERGED` / `CLOSED`), 1 on TIMEOUT, 2 on bad usage. Per-iteration
-heartbeats go to stderr so the headline on stdout can be cleanly captured.
-
-### Synchronous (the simple case)
-
-Use `workflow.sh await <PR>` after `gh pr create`. The `await` subcommand
-runs the looper, then dumps `pr-status.sh` + `pr-comments.sh`. Default cap
-is 30 iterations × 60s; tune with `STEWARD_PR_AWAIT_ITERS` and
-`STEWARD_PR_AWAIT_INTERVAL`. The main session burns context during the
-wait — fine for a few minutes, wasteful past ~5.
-
-### Asynchronous (preferred for long waits)
-
-Hand the wait to a **background subagent** so the main session pays the
-cache cost only once, when readiness fires. Invoke the `Agent` tool with:
-
-- `subagent_type: general-purpose`
-- `run_in_background: true`
-- `description: "Poll PR <N> for reviewer readiness"`
-- `prompt`: the template below, with `<PR>` and `<OWNER/REPO>` substituted.
-
-```text
-You are a background poller for GitHub PR <PR> at <OWNER/REPO>. Run:
-
-    bash .claude/skills/cicd/scripts/poll-readiness.sh \
-        --repo <OWNER/REPO> --max-iters 30 --interval 60 \
-        --require qodo <PR>
-
-The script returns 0 when qodo and Copilot are both ready (or the PR is
-MERGED/CLOSED), 1 on TIMEOUT. Capture its stdout (the headline) and emit
-it as your final report verbatim, then stop. Do not triage, do not run
-pr-status.sh, do not call any other commands — readiness reporting only.
-The parent agent will refetch and triage when your notification arrives.
-```
-
-When the subagent returns, run `bash .claude/skills/cicd/scripts/workflow.sh await <PR>` (or just `pr-status.sh` + `pr-comments.sh`) to triage. The user can interrupt the subagent at any time with TaskStop.
+- **Synchronous** — `workflow.sh await <PR>` after `gh pr create`. The
+  main session burns context during the wait; fine up to ~5 minutes.
+- **Asynchronous** — for longer waits, run the looper inside a background
+  subagent (Agent tool, `run_in_background: true`) so the main session
+  only pays the cache cost when readiness fires. The subagent's only job
+  is to invoke `poll-readiness.sh` and echo its headline back. The
+  parent triages with `workflow.sh await <PR>` when the notification
+  arrives. The user can interrupt with TaskStop.
 
 This pattern is borrowed from sibling repo
 [`agentculture/cfafi`](https://github.com/agentculture/cfafi)'s `poll`

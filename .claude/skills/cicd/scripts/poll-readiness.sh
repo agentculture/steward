@@ -146,27 +146,53 @@ while (( iter < MAX_ITERS )); do
         exit 0
     fi
 
-    # 2. Fetch comments via the vendored sibling fetcher.
-    if ! comments=$(bash "$SCRIPT_DIR/pr-comments.sh" --repo "$REPO" "$PR_NUMBER" 2>/dev/null); then
-        echo "iter ${iter}: pr-comments.sh failed; will retry" >&2
+    # 2. Fetch raw, untruncated bodies directly from the GitHub API.
+    #    Reasoning: pr-comments.sh truncates comment bodies for human display,
+    #    so its output isn't a reliable input for readiness logic — a long
+    #    qodo comment can have its "Code Review by Qodo" marker fall past the
+    #    truncation, and a stale "Looking for bugs?" placeholder elsewhere in
+    #    the dump can flip a real review back to "placeholder-only". Using
+    #    `gh api` here also avoids the SonarCloud round-trip pr-comments.sh
+    #    now does on every iteration (qodo PR #17 review, perf bug).
+    issue_json=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate 2>/dev/null) || {
+        echo "iter ${iter}: gh api issues/comments failed; will retry" >&2
         sleep "$INTERVAL"
         continue
-    fi
+    }
+    reviews_json=$(gh api "repos/$REPO/pulls/$PR_NUMBER/reviews" --paginate 2>/dev/null) || {
+        echo "iter ${iter}: gh api pulls/reviews failed; will retry" >&2
+        sleep "$INTERVAL"
+        continue
+    }
 
-    # 3. qodo readiness — body contains "Code Review by Qodo" AND not the placeholder.
-    if grep -qF "Code Review by Qodo" <<<"$comments"; then
-        if grep -qF "Looking for bugs?" <<<"$comments"; then
-            qodo_status="placeholder-only"
-        else
-            qodo_status="ready"
-        fi
+    # 3. qodo readiness — match the structural <h3>Code Review by Qodo</h3>
+    #    header, which appears only in the done-state body. Cfafi's bare-text
+    #    heuristic ("contains 'Code Review by Qodo' AND NOT 'Looking for
+    #    bugs?'") false-positives when qodo's done review *quotes* either
+    #    string while reporting bugs about polling code (PR #17 hit this).
+    #    The placeholder comment uses a different layout (no <h3> wrapper),
+    #    so the H3 marker alone is enough.
+    qodo_real=$(echo "$issue_json" | jq '[
+        .[] | select(.user.login == "qodo-code-review[bot]")
+            | select(.body | contains("<h3>Code Review by Qodo</h3>"))
+    ] | length')
+    qodo_any=$(echo "$issue_json" | jq '[
+        .[] | select(.user.login == "qodo-code-review[bot]")
+    ] | length')
+    if (( qodo_real > 0 )); then
+        qodo_status="ready"
+    elif (( qodo_any > 0 )); then
+        qodo_status="placeholder-only"
     else
         qodo_status="not-posted"
     fi
 
-    # 4. Copilot readiness — TOP-LEVEL REVIEWS header count > 0.
-    copilot_count=$(grep -oE 'TOP-LEVEL REVIEWS \([0-9]+\)' <<<"$comments" | grep -oE '[0-9]+' | head -1 || true)
-    copilot_count=${copilot_count:-0}
+    # 4. Copilot readiness — at least one top-level review with a non-empty
+    #    body. Excludes "review whose only content is inline comments".
+    copilot_count=$(echo "$reviews_json" | jq '[
+        .[] | select((.user.login // "") | startswith("copilot"))
+            | select((.body // "") != "")
+    ] | length')
     if (( copilot_count > 0 )); then
         copilot_status="ready"
     else
