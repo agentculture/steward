@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-05-08
+
+### Added
+
+- `cicd/scripts/poll-readiness.sh` — readiness loop that exits when all
+  required reviewers have posted (or PR closes / cap hits). Mirrors the
+  detection heuristic from cfafi's `poll` skill: qodo body contains
+  `Code Review by Qodo` AND NOT `Looking for bugs?` placeholder; Copilot
+  has at least one top-level review.
+- Configurable required-reviewer set via `--require qodo[,copilot]` and
+  the `STEWARD_PR_REVIEWERS` env var. Default is **qodo only** because
+  Copilot's automated PR-review bot stopped posting top-level reviews on
+  agentculture repos in 2026; Copilot status is still detected and
+  reported in the headline, just not gated on.
+- `workflow.sh poll-readiness <PR>` subcommand wrapping the looper for
+  direct/standalone use.
+- SonarCloud Section 4 in `pr-comments.sh` (new-issue list, `<owner>_<repo>`
+  derived key with `SONAR_PROJECT_KEY` override).
+- `SKILL.md` — "Polling for reviewer readiness" section documenting both
+  the synchronous `await` path and the preferred asynchronous
+  background-subagent pattern (Agent tool with `run_in_background: true`).
+
+### Changed
+
+- `workflow.sh await <PR>` no longer fixed-sleeps for 5 minutes. Default is
+  now 30 iterations × 60s of readiness polling; tune with
+  `STEWARD_PR_AWAIT_ITERS` and `STEWARD_PR_AWAIT_INTERVAL`.
+- `STEWARD_PR_AWAIT_SECONDS` is preserved as a deprecated back-compat shim
+  that re-enables the legacy fixed-sleep with a warning on stderr.
+
+### Fixed
+
+- Stale `SKILL.md` Reply-etiquette claim that "Steward currently has no
+  SonarCloud integration" — pr-status.sh has queried SonarCloud since the
+  cicd rename; pr-comments.sh now does too.
+
 ## [0.8.0] - 2026-05-03
 
 ### Added

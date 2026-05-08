@@ -49,14 +49,43 @@ Per-machine paths (sibling-project layout) live in
 | `workflow.sh lint` | Portability lint on the current diff (staged + unstaged). |
 | `workflow.sh open-pr --title T [--body-file F] [--wait SECS] [...]` | `gh pr create` then sleep 180s (or `--wait SECS`) and fetch reviewer comments in one shot. Use after pushing the initial branch. |
 | `workflow.sh poll <PR>` | Fetch and display all review comments. |
+| `workflow.sh poll-readiness <PR> [--max-iters N] [--interval SECS] [--require LIST]` | Loop until all required reviewers are ready (default `qodo`; pass `--require qodo,copilot` to also gate on Copilot) — or the PR closes / iteration cap hits. Headline on stdout, per-iteration diagnostics on stderr. Direct wrapper around `scripts/poll-readiness.sh`. |
 | `workflow.sh wait-after-push <PR> [--wait SECS]` | Sleep 180s (or `--wait SECS`) then re-fetch comments. Use after pushing fixes. |
-| `workflow.sh await <PR>` | Sleep 5 minutes (or `STEWARD_PR_AWAIT_SECONDS=<n>`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (Qodo / Copilot / SonarCloud / CF Pages comments). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Canonical post-`gh pr create` step when SonarCloud is wired up; lighter-weight `open-pr` is the default for greenfield. |
+| `workflow.sh await <PR>` | Poll for reviewer readiness (default: 30 × 60s ≈ 30 min cap, requires qodo only; tune with `STEWARD_PR_AWAIT_ITERS`, `STEWARD_PR_AWAIT_INTERVAL`, and `STEWARD_PR_REVIEWERS`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (inline / issue / top-level / SonarCloud-new-issues sections). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Setting the legacy `STEWARD_PR_AWAIT_SECONDS=<n>` falls back to a fixed sleep with a deprecation warning. |
 | `workflow.sh delta` | Dump each sibling project's `CLAUDE.md` head + `culture.yaml`. |
 | `workflow.sh reply <PR>` | Batch reply (JSONL on stdin) and resolve threads. |
 | `workflow.sh help` | Print this list. |
 
 The vendored single-comment helpers — `pr-reply.sh`, `pr-status.sh` — live
 next to `workflow.sh` and are usable directly when batching isn't appropriate.
+
+## Polling for reviewer readiness
+
+`scripts/poll-readiness.sh` watches a PR until its required reviewers post
+real (not placeholder) feedback, the PR closes, or an iteration cap fires.
+It fetches `gh api` JSON directly — never `pr-comments.sh` output — so
+truncation can't bias the gate. Default required set is qodo only
+(see header comments and `--help` for tunables, env vars, and the `qodo` /
+`copilot` heuristics; Copilot is detected but not required because its
+review bot is silent on agentculture repos in 2026). Heartbeats stream to
+stderr; the final headline is the only thing on stdout.
+
+Two ways to drive it:
+
+- **Synchronous** — `workflow.sh await <PR>` after `gh pr create`. The
+  main session burns context during the wait; fine up to ~5 minutes.
+- **Asynchronous** — for longer waits, run the looper inside a background
+  subagent (Agent tool, `run_in_background: true`) so the main session
+  only pays the cache cost when readiness fires. The subagent's only job
+  is to invoke `poll-readiness.sh` and echo its headline back. The
+  parent triages with `workflow.sh await <PR>` when the notification
+  arrives. The user can interrupt with TaskStop.
+
+This pattern is borrowed from sibling repo
+[`agentculture/cfafi`](https://github.com/agentculture/cfafi)'s `poll`
+skill — Steward vendors only the looper here rather than promoting `poll`
+to its own first-class skill until other Steward verbs need the same
+primitive.
 
 ## End-to-end flow
 
@@ -66,7 +95,7 @@ git checkout -b <type>/<desc>
 .claude/skills/cicd/scripts/workflow.sh lint
 git commit -am "..." && git push -u origin <branch>
 gh pr create --title "..." --body "..."   # title <70 chars, body signed "- <nick> (Claude)"
-.claude/skills/cicd/scripts/workflow.sh await <PR>   # 5-min wait, then CI + SonarCloud + all comments
+.claude/skills/cicd/scripts/workflow.sh await <PR>   # readiness loop, then CI + SonarCloud + all comments
 # triage; if CLAUDE.md/culture.yaml/.claude/skills changed:
 .claude/skills/cicd/scripts/workflow.sh delta
 # fix, re-lint, push
@@ -122,7 +151,12 @@ Revisit each line as the corresponding stack element actually lands.
 
 Every comment must get a reply — no silent fixes. Always pass `--resolve`
 when batch-replying so threads close automatically. Reference the
-review-comment IDs in the fix-up commit message. Steward currently has no
-SonarCloud integration and isn't a registered mesh agent, so skip the
-sonarclaude check and the post-merge IRC ping that Culture's `pr-review`
-includes — those will return when Steward joins those systems.
+review-comment IDs in the fix-up commit message.
+
+SonarCloud is queried in two places: `pr-status.sh` (quality gate, OPEN
+issues, hotspots) and the Section-4 dump in `pr-comments.sh` (new-issue
+list). Both derive the project key as `<owner>_<repo>`; override with
+`SONAR_PROJECT_KEY=<key>` for non-standard naming, and they silently skip
+when the project isn't on SonarCloud. Steward isn't yet a registered mesh
+agent, so the post-merge IRC ping that Culture's `pr-review` includes is
+still skipped — that returns when Steward joins the mesh.

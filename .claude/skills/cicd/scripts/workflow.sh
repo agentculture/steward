@@ -7,11 +7,22 @@
 #                           Use right after pushing the initial branch.
 #                           Override the wait with --wait <secs>.
 #   poll <PR>               fetch and display review comments
+#   poll-readiness <PR>     loop until required reviewers are ready (default:
+#                           qodo only; Copilot's bot stopped posting in 2026)
+#                           — or PR closes / cap hits. Forwards extra flags
+#                           to scripts/poll-readiness.sh (--max-iters N,
+#                           --interval SECS, --require qodo[,copilot],
+#                           --repo OWNER/REPO).
 #   wait-after-push <PR>    sleep 180s then re-fetch comments. Use after pushing fixes.
 #                           Override the wait with --wait <secs>.
-#   await <PR>              sleep 5 min, then check CI + SonarCloud + all comments;
-#                           exits non-zero on SonarCloud ERROR or unresolved threads.
-#                           Override the wait with STEWARD_PR_AWAIT_SECONDS=<n>.
+#   await <PR>              poll for reviewer readiness (default: up to 30 × 60s,
+#                           requires qodo only), then run pr-status + pr-comments.
+#                           Exits non-zero on SonarCloud ERROR or unresolved
+#                           threads. Tunables: STEWARD_PR_AWAIT_ITERS (default 30),
+#                           STEWARD_PR_AWAIT_INTERVAL (default 60),
+#                           STEWARD_PR_REVIEWERS (default "qodo").
+#                           Legacy fixed-sleep mode: set STEWARD_PR_AWAIT_SECONDS=<n>
+#                           (deprecated; emits a warning).
 #   reply <PR>              batch reply to review comments (JSONL on stdin), --resolve
 #   delta                   dump CLAUDE.md head + culture.yaml for each sibling project
 #                           listed in skills.local.yaml (alignment-delta check)
@@ -65,6 +76,13 @@ case "$cmd" in
         PR="${1:?Usage: workflow.sh poll <PR>}"
         bash "$SCRIPT_DIR/pr-comments.sh" "$PR"
         ;;
+    poll-readiness)
+        if [ $# -lt 1 ]; then
+            echo "Usage: workflow.sh poll-readiness <PR> [--max-iters N] [--interval SECS] [--repo OWNER/REPO]" >&2
+            exit 2
+        fi
+        bash "$SCRIPT_DIR/poll-readiness.sh" "$@"
+        ;;
     wait-after-push)
         # Forward all remaining args (PR number plus any --wait/--repo
         # flags wait-and-check.sh accepts) so docs that promise
@@ -77,9 +95,28 @@ case "$cmd" in
         ;;
     await)
         PR="${1:?Usage: workflow.sh await <PR>}"
-        WAIT="${STEWARD_PR_AWAIT_SECONDS:-300}"
-        echo "→ waiting ${WAIT}s for Qodo / Copilot / SonarCloud to post …" >&2
-        sleep "$WAIT"
+        # Legacy fixed-sleep path — kept for back-compat. If
+        # STEWARD_PR_AWAIT_SECONDS is set we honor it but warn; the modern
+        # path is readiness-driven via poll-readiness.sh.
+        if [ -n "${STEWARD_PR_AWAIT_SECONDS:-}" ]; then
+            echo "warning: STEWARD_PR_AWAIT_SECONDS is deprecated; prefer STEWARD_PR_AWAIT_ITERS / _INTERVAL." >&2
+            echo "→ waiting ${STEWARD_PR_AWAIT_SECONDS}s (legacy fixed-sleep) …" >&2
+            sleep "$STEWARD_PR_AWAIT_SECONDS"
+        else
+            ITERS="${STEWARD_PR_AWAIT_ITERS:-30}"
+            INTERVAL="${STEWARD_PR_AWAIT_INTERVAL:-60}"
+            echo "── poll-readiness ────────────────────────────────────────────────────" >&2
+            # Don't bail if the looper TIMEOUTs — still want to dump pr-status
+            # and pr-comments so the user sees what *did* arrive.
+            set +e
+            bash "$SCRIPT_DIR/poll-readiness.sh" \
+                --max-iters "$ITERS" --interval "$INTERVAL" "$PR"
+            POLL_RC=$?
+            set -e
+            if [ "$POLL_RC" -ne 0 ]; then
+                echo "(poll-readiness exited $POLL_RC — falling through to status/comments anyway)" >&2
+            fi
+        fi
         # pr-status.sh is the source of truth for the SonarCloud / unresolved
         # markers we gate on, so its failure must propagate — otherwise we'd
         # falsely claim "✓ no SonarCloud ERROR" when the check never ran.
@@ -164,7 +201,7 @@ case "$cmd" in
         [ "$any" -eq 0 ] && echo "(no sibling_projects configured in $CFG)"
         ;;
     help|--help|-h)
-        sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
+        sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
         ;;
     *)
         echo "unknown subcommand: $cmd" >&2
