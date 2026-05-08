@@ -9,11 +9,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `cicd/scripts/poll-readiness.sh` — readiness loop that exits when both
-  qodo and Copilot have posted (or PR closes / cap hits). Mirrors the
+- `cicd/scripts/poll-readiness.sh` — readiness loop that exits when all
+  required reviewers have posted (or PR closes / cap hits). Mirrors the
   detection heuristic from cfafi's `poll` skill: qodo body contains
   `Code Review by Qodo` AND NOT `Looking for bugs?` placeholder; Copilot
   has at least one top-level review.
+- Configurable required-reviewer set via `--require qodo[,copilot]` and
+  the `STEWARD_PR_REVIEWERS` env var. Default is **qodo only** because
+  Copilot's automated PR-review bot stopped posting top-level reviews on
+  agentculture repos in 2026; Copilot status is still detected and
+  reported in the headline, just not gated on.
 - `workflow.sh poll-readiness <PR>` subcommand wrapping the looper for
   direct/standalone use.
 - SonarCloud Section 4 in `pr-comments.sh` (new-issue list, `<owner>_<repo>`

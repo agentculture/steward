@@ -49,9 +49,9 @@ Per-machine paths (sibling-project layout) live in
 | `workflow.sh lint` | Portability lint on the current diff (staged + unstaged). |
 | `workflow.sh open-pr --title T [--body-file F] [--wait SECS] [...]` | `gh pr create` then sleep 180s (or `--wait SECS`) and fetch reviewer comments in one shot. Use after pushing the initial branch. |
 | `workflow.sh poll <PR>` | Fetch and display all review comments. |
-| `workflow.sh poll-readiness <PR> [--max-iters N] [--interval SECS]` | Loop until qodo + Copilot are both ready (or the PR closes / iteration cap hits). Headline on stdout, per-iteration diagnostics on stderr. Direct wrapper around `scripts/poll-readiness.sh`. |
+| `workflow.sh poll-readiness <PR> [--max-iters N] [--interval SECS] [--require LIST]` | Loop until all required reviewers are ready (default `qodo`; pass `--require qodo,copilot` to also gate on Copilot) — or the PR closes / iteration cap hits. Headline on stdout, per-iteration diagnostics on stderr. Direct wrapper around `scripts/poll-readiness.sh`. |
 | `workflow.sh wait-after-push <PR> [--wait SECS]` | Sleep 180s (or `--wait SECS`) then re-fetch comments. Use after pushing fixes. |
-| `workflow.sh await <PR>` | Poll for reviewer readiness (default 30 × 60s ≈ 30 min cap; tune with `STEWARD_PR_AWAIT_ITERS` and `STEWARD_PR_AWAIT_INTERVAL`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (inline / issue / top-level / SonarCloud-new-issues sections). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Setting the legacy `STEWARD_PR_AWAIT_SECONDS=<n>` falls back to a fixed sleep with a deprecation warning. |
+| `workflow.sh await <PR>` | Poll for reviewer readiness (default: 30 × 60s ≈ 30 min cap, requires qodo only; tune with `STEWARD_PR_AWAIT_ITERS`, `STEWARD_PR_AWAIT_INTERVAL`, and `STEWARD_PR_REVIEWERS`), then run `pr-status.sh` (CI checks + SonarCloud quality gate, OPEN issues, hotspots) and `pr-comments.sh` (inline / issue / top-level / SonarCloud-new-issues sections). Exits non-zero on SonarCloud `ERROR` or unresolved threads. Setting the legacy `STEWARD_PR_AWAIT_SECONDS=<n>` falls back to a fixed sleep with a deprecation warning. |
 | `workflow.sh delta` | Dump each sibling project's `CLAUDE.md` head + `culture.yaml`. |
 | `workflow.sh reply <PR>` | Batch reply (JSONL on stdin) and resolve threads. |
 | `workflow.sh help` | Print this list. |
@@ -66,11 +66,19 @@ Two modes, same looper (`scripts/poll-readiness.sh`). Both watch for:
 - **qodo ready** — an issue comment whose body contains `Code Review by Qodo`
   AND does NOT contain qodo's "still analysing" placeholder
   (`Looking for bugs?`).
-- **Copilot ready** — at least one top-level review with a non-empty body.
+- **Copilot ready** *(detected, not required by default)* — at least one
+  top-level review with a non-empty body.
 
-The looper exits 0 the moment both signals fire (or the PR is `MERGED` /
-`CLOSED`), 1 on TIMEOUT, 2 on bad usage. Per-iteration heartbeats go to
-stderr so the headline on stdout can be cleanly captured.
+Default required set is **qodo only** (`--require qodo`, override with
+`STEWARD_PR_REVIEWERS=qodo,copilot` or the `--require` flag). Copilot's
+PR-review bot stopped posting top-level reviews on agentculture repos in
+2026, so requiring it would make every wait TIMEOUT; the looper still
+*reports* Copilot status in the headline, just doesn't gate on it.
+Re-add `copilot` to `--require` if it starts posting again.
+
+The looper exits 0 the moment all required reviewers are ready (or the PR
+is `MERGED` / `CLOSED`), 1 on TIMEOUT, 2 on bad usage. Per-iteration
+heartbeats go to stderr so the headline on stdout can be cleanly captured.
 
 ### Synchronous (the simple case)
 
@@ -94,7 +102,8 @@ cache cost only once, when readiness fires. Invoke the `Agent` tool with:
 You are a background poller for GitHub PR <PR> at <OWNER/REPO>. Run:
 
     bash .claude/skills/cicd/scripts/poll-readiness.sh \
-        --repo <OWNER/REPO> --max-iters 30 --interval 60 <PR>
+        --repo <OWNER/REPO> --max-iters 30 --interval 60 \
+        --require qodo <PR>
 
 The script returns 0 when qodo and Copilot are both ready (or the PR is
 MERGED/CLOSED), 1 on TIMEOUT. Capture its stdout (the headline) and emit

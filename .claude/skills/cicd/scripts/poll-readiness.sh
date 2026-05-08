@@ -13,13 +13,22 @@ set -euo pipefail
 #       session pays the cache cost only once, at completion.
 #
 # Usage:
-#   poll-readiness.sh [--repo OWNER/REPO] [--max-iters N] [--interval SECS] PR_NUMBER
+#   poll-readiness.sh [--repo OWNER/REPO] [--max-iters N] [--interval SECS]
+#                     [--require LIST] PR_NUMBER
 #
-# Defaults: --max-iters 30, --interval 60   (≈30-minute hard cap)
+# Defaults: --max-iters 30, --interval 60, --require qodo  (≈30-minute hard cap)
+#
+# --require accepts a comma-separated subset of {qodo,copilot}; the loop
+# exits 0 only when every listed reviewer is "ready" (or PR state flips
+# to MERGED/CLOSED). Override the default via STEWARD_PR_REVIEWERS=...
+# Copilot is *not* required by default — its automated PR-review bot
+# stopped posting top-level reviews on agentculture repos in 2026, so
+# requiring it would cause every wait to TIMEOUT. Re-add `--require
+# qodo,copilot` if Copilot starts posting again.
 #
 # Exit codes:
-#   0  Both qodo and Copilot ready, OR PR state is MERGED / CLOSED.
-#   1  TIMEOUT after --max-iters with at least one reviewer still pending.
+#   0  All required reviewers ready, OR PR state is MERGED / CLOSED.
+#   1  TIMEOUT after --max-iters with at least one required reviewer pending.
 #   2  Bad usage.
 #
 # Output:
@@ -36,10 +45,18 @@ set -euo pipefail
 
 usage() {
     cat >&2 <<'EOF'
-Usage: poll-readiness.sh [--repo OWNER/REPO] [--max-iters N] [--interval SECS] PR_NUMBER
+Usage: poll-readiness.sh [--repo OWNER/REPO] [--max-iters N] [--interval SECS]
+                         [--require LIST] PR_NUMBER
 
-Defaults: --max-iters 30, --interval 60.
-Exit 0 when both qodo and Copilot have posted (or PR closed),
+Defaults: --max-iters 30, --interval 60, --require qodo
+  (set STEWARD_PR_REVIEWERS to override the default --require list)
+
+--require LIST  comma-separated subset of {qodo,copilot}. Exit 0 only
+                when every listed reviewer is ready, or PR closes.
+                Copilot is not required by default — its bot stopped
+                posting top-level reviews on agentculture repos in 2026.
+
+Exit 0 when all required reviewers ready (or PR closed),
 exit 1 on TIMEOUT, exit 2 on bad usage.
 EOF
     exit 2
@@ -56,12 +73,14 @@ REPO=""
 MAX_ITERS=30
 INTERVAL=60
 PR_NUMBER=""
+REQUIRE="${STEWARD_PR_REVIEWERS:-qodo}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --repo)       require_value "$@"; REPO="$2"; shift 2 ;;
         --max-iters)  require_value "$@"; MAX_ITERS="$2"; shift 2 ;;
         --interval)   require_value "$@"; INTERVAL="$2"; shift 2 ;;
+        --require)    require_value "$@"; REQUIRE="$2"; shift 2 ;;
         -h|--help)    usage ;;
         --) shift; break ;;
         -*) echo "Unknown flag: $1" >&2; usage ;;
@@ -73,6 +92,25 @@ done
 [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || { echo "PR_NUMBER must be a positive integer" >&2; exit 2; }
 [[ "$MAX_ITERS" =~ ^[0-9]+$ ]] || { echo "--max-iters must be a positive integer" >&2; exit 2; }
 [[ "$INTERVAL"  =~ ^[0-9]+$ ]] || { echo "--interval must be a positive integer"  >&2; exit 2; }
+
+# Parse --require into REQUIRE_QODO / REQUIRE_COPILOT booleans. Reject
+# unknown reviewers so a typo (e.g. "qoda") doesn't silently make the
+# loop exit on iteration 1.
+REQUIRE_QODO=0
+REQUIRE_COPILOT=0
+IFS=',' read -ra _REQ <<<"$REQUIRE"
+for r in "${_REQ[@]}"; do
+    r="${r// /}"
+    case "$r" in
+        ""|qodo)   REQUIRE_QODO=1 ;;
+        copilot)   REQUIRE_COPILOT=1 ;;
+        *) echo "--require: unknown reviewer '$r' (valid: qodo, copilot)" >&2; exit 2 ;;
+    esac
+done
+if [[ $REQUIRE_QODO -eq 0 && $REQUIRE_COPILOT -eq 0 ]]; then
+    echo "--require: at least one reviewer must be required" >&2
+    exit 2
+fi
 
 if [[ -z "$REPO" ]]; then
     REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
@@ -136,13 +174,17 @@ while (( iter < MAX_ITERS )); do
     fi
 
     # 5. Done?
-    if [[ "$qodo_status" == "ready" && "$copilot_status" == "ready" ]]; then
-        emit_headline "OPEN" "ready" "ready" "$iter" \
-            "Run \`workflow.sh await ${PR_NUMBER}\` (or pr-comments.sh) and triage."
+    qodo_ok=1
+    copilot_ok=1
+    [[ $REQUIRE_QODO    -eq 1 && "$qodo_status"    != "ready" ]] && qodo_ok=0
+    [[ $REQUIRE_COPILOT -eq 1 && "$copilot_status" != "ready" ]] && copilot_ok=0
+    if [[ $qodo_ok -eq 1 && $copilot_ok -eq 1 ]]; then
+        emit_headline "OPEN" "$qodo_status" "$copilot_status" "$iter" \
+            "Required reviewers ready (require=${REQUIRE}); run pr-status.sh and triage."
         exit 0
     fi
 
-    echo "iter ${iter}/${MAX_ITERS}: qodo=${qodo_status}, copilot=${copilot_status}; sleeping ${INTERVAL}s" >&2
+    echo "iter ${iter}/${MAX_ITERS}: qodo=${qodo_status}, copilot=${copilot_status} (require=${REQUIRE}); sleeping ${INTERVAL}s" >&2
     if (( iter < MAX_ITERS )); then
         sleep "$INTERVAL"
     fi

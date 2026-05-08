@@ -7,17 +7,20 @@
 #                           Use right after pushing the initial branch.
 #                           Override the wait with --wait <secs>.
 #   poll <PR>               fetch and display review comments
-#   poll-readiness <PR>     loop until qodo + Copilot are both ready
-#                           (or PR closes / cap hits). Forwards extra flags
+#   poll-readiness <PR>     loop until required reviewers are ready (default:
+#                           qodo only; Copilot's bot stopped posting in 2026)
+#                           — or PR closes / cap hits. Forwards extra flags
 #                           to scripts/poll-readiness.sh (--max-iters N,
-#                           --interval SECS, --repo OWNER/REPO).
+#                           --interval SECS, --require qodo[,copilot],
+#                           --repo OWNER/REPO).
 #   wait-after-push <PR>    sleep 180s then re-fetch comments. Use after pushing fixes.
 #                           Override the wait with --wait <secs>.
-#   await <PR>              poll for reviewer readiness (default: up to 30 × 60s),
-#                           then run pr-status + pr-comments. Exits non-zero on
-#                           SonarCloud ERROR or unresolved threads. Tunables:
-#                           STEWARD_PR_AWAIT_ITERS (default 30),
-#                           STEWARD_PR_AWAIT_INTERVAL (default 60).
+#   await <PR>              poll for reviewer readiness (default: up to 30 × 60s,
+#                           requires qodo only), then run pr-status + pr-comments.
+#                           Exits non-zero on SonarCloud ERROR or unresolved
+#                           threads. Tunables: STEWARD_PR_AWAIT_ITERS (default 30),
+#                           STEWARD_PR_AWAIT_INTERVAL (default 60),
+#                           STEWARD_PR_REVIEWERS (default "qodo").
 #                           Legacy fixed-sleep mode: set STEWARD_PR_AWAIT_SECONDS=<n>
 #                           (deprecated; emits a warning).
 #   reply <PR>              batch reply to review comments (JSONL on stdin), --resolve
@@ -198,7 +201,7 @@ case "$cmd" in
         [ "$any" -eq 0 ] && echo "(no sibling_projects configured in $CFG)"
         ;;
     help|--help|-h)
-        sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
+        sed -n '2,29p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
         ;;
     *)
         echo "unknown subcommand: $cmd" >&2
