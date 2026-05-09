@@ -89,3 +89,82 @@ def test_doctor_skills_convention_catches_name_mismatch(
     assert rc == 1
     assert "frontmatter name 'wrong-name' != dir 'real-name'" in captured.err
     assert captured.out == ""
+
+
+def test_doctor_skills_convention_catches_missing_skill_md(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Skill dir with scripts/ but no SKILL.md is reported on stderr."""
+    (tmp_path / ".claude" / "skills" / "broken" / "scripts").mkdir(parents=True)
+    rc = main(["doctor", "--check", "skills-convention", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "missing SKILL.md" in captured.err
+
+
+def test_doctor_skills_convention_catches_missing_name_field(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """SKILL.md whose frontmatter omits `name:` is reported."""
+    skill = tmp_path / ".claude" / "skills" / "no-name"
+    (skill / "scripts").mkdir(parents=True)
+    # Frontmatter with description but no name: — exercises the
+    # `if not match` branch in _check_skills_convention.
+    (skill / "SKILL.md").write_text("---\ndescription: x\n---\n")
+    rc = main(["doctor", "--check", "skills-convention", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "no `name:` field in frontmatter" in captured.err
+
+
+def test_doctor_json_output_serializes_findings(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--json` on a target with findings emits parseable JSON with all fields.
+
+    Targets ``Finding.to_dict`` (doctor.py:48) — the structured-output
+    serializer that the empty-findings JSON test doesn't exercise.
+    """
+    (tmp_path / ".claude" / "skills" / "broken" / "scripts").mkdir(parents=True)
+    rc = main(["doctor", "--json", "--check", "skills-convention", str(tmp_path)])
+    captured = capsys.readouterr()
+    assert rc == 1
+    parsed = json.loads(captured.out)
+    assert isinstance(parsed, list) and parsed
+    assert {"check", "path", "message"} <= set(parsed[0].keys())
+    assert parsed[0]["check"] == "skills-convention"
+    assert parsed[0]["message"] == "missing SKILL.md"
+
+
+def test_find_git_root_locates_repo_for_known_path() -> None:
+    """`_find_git_root` returns the steward checkout root when given a
+    file path inside it. Targets doctor.py:66 (the loop-body return)."""
+    from steward.cli._commands.doctor import _find_git_root
+
+    root = _find_git_root(REPO_ROOT)
+    assert root == REPO_ROOT
+
+
+def test_dispatch_wraps_unexpected_exception(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A non-StewardError raised by a handler is wrapped, not re-raised.
+
+    Targets the catch-all branch in `steward.cli.__init__._dispatch` —
+    the safety net that prevents Python tracebacks from leaking to the
+    user when something the handler didn't anticipate goes wrong.
+    """
+    import argparse
+
+    from steward.cli import _dispatch
+
+    args = argparse.Namespace(
+        func=lambda _a: (_ for _ in ()).throw(ValueError("boom")),
+    )
+    rc = _dispatch(args)
+    captured = capsys.readouterr()
+    assert rc != 0
+    assert "unexpected: ValueError: boom" in captured.err

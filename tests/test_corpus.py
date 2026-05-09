@@ -342,3 +342,133 @@ def test_write_repo_report_preserves_unmanaged_file(tmp_path: Path) -> None:
     path, status = _corpus.write_repo_report(repo, body)
     assert status == "skipped-unmanaged"
     assert "Hand-written notes" in path.read_text()
+
+
+# ── Edge-case coverage for defensive guards ────────────────────────────────
+# The tests below target the "easy" defensive branches that the
+# happy-path discover/synthesize/score tests above don't reach: empty
+# corpora, non-dict YAML rows, missing/malformed SKILL.md frontmatter,
+# CLAUDE.md section parsing.
+
+
+def test_synthesize_perfect_patient_renders_baseline_in_one_call(tmp_path: Path) -> None:
+    """``synthesize_perfect_patient`` is the public one-shot wrapper used
+    by ``doctor --scope siblings``. Targets _corpus.py:497."""
+    _make_repo(tmp_path, "alpha", [{"suffix": "a", "backend": "claude"}])
+    agents, _errors = _corpus.discover_agents(tmp_path)
+    body = _corpus.synthesize_perfect_patient(agents)
+    assert "# Perfect patient" in body
+
+
+def test_steward_error_to_dict_round_trips() -> None:
+    """``StewardError.to_dict`` returns the structured payload used by
+    ``--json`` rendering. Targets _errors.py:33."""
+    from steward.cli._errors import EXIT_USER_ERROR, StewardError
+
+    err = StewardError(code=EXIT_USER_ERROR, message="msg", remediation="fix")
+    assert err.to_dict() == {"code": EXIT_USER_ERROR, "message": "msg", "remediation": "fix"}
+
+
+def test_classify_returns_empty_on_empty_counter() -> None:
+    """`_classify` early-returns when total is 0 instead of dividing."""
+    from collections import Counter
+
+    required, recommended = _corpus._classify(Counter(), 0)
+    assert required == set()
+    assert recommended == set()
+
+
+def test_discover_agents_skips_non_dict_yaml_rows(tmp_path: Path) -> None:
+    """`agents:` rows that are strings (not dicts) are silently skipped."""
+    repo = tmp_path / "alpha"
+    repo.mkdir()
+    # First row is a string, not a dict — `_build_agent` returns None.
+    # Second row is a dict missing `suffix` — also returns None.
+    # Third row is well-formed — survives.
+    (repo / "culture.yaml").write_text(
+        "agents:\n  - just-a-string\n  - {backend: claude}\n  - {suffix: ok, backend: claude}\n"
+    )
+    agents, _errors = _corpus.discover_agents(tmp_path)
+    assert [a.suffix for a in agents] == ["ok"]
+
+
+def test_extract_agent_entries_handles_non_dict_top_level() -> None:
+    """A culture.yaml whose root parses to a list (not dict) yields no entries."""
+    assert _corpus._extract_agent_entries([]) == []  # type: ignore[arg-type]
+
+
+def test_read_skill_description_handles_malformed_frontmatter(tmp_path: Path) -> None:
+    """Missing file, no frontmatter, unterminated frontmatter, broken YAML,
+    and non-string `description:` all return ``""`` rather than raising."""
+    # Missing file → OSError branch.
+    assert _corpus._read_skill_description(tmp_path / "missing.md") == ""
+
+    # No leading `---` → not frontmatter.
+    p1 = tmp_path / "no-fm.md"
+    p1.write_text("# just a heading\n")
+    assert _corpus._read_skill_description(p1) == ""
+
+    # Leading `---` but no closing `---` → unterminated.
+    p2 = tmp_path / "unterminated.md"
+    p2.write_text("---\nname: x\ndescription: y\n")
+    assert _corpus._read_skill_description(p2) == ""
+
+    # Malformed YAML inside frontmatter.
+    p3 = tmp_path / "bad-yaml.md"
+    p3.write_text("---\nname: x\n  bad: indent: here\n---\n")
+    assert _corpus._read_skill_description(p3) == ""
+
+    # `description:` is a non-string (list) → reject.
+    p4 = tmp_path / "non-string.md"
+    p4.write_text("---\nname: x\ndescription:\n  - a\n  - b\n---\n")
+    assert _corpus._read_skill_description(p4) == ""
+
+    # `description:` is whitespace-only after collapse → reject.
+    p5 = tmp_path / "blank-desc.md"
+    p5.write_text("---\nname: x\ndescription: '   '\n---\n")
+    assert _corpus._read_skill_description(p5) == ""
+
+
+def test_read_skill_description_truncates_long_text(tmp_path: Path) -> None:
+    """Descriptions longer than 200 chars with no early sentence break are
+    cut at 197 chars + ellipsis."""
+    p = tmp_path / "long.md"
+    long_text = "x" * 500  # no `. ` sentence break, longer than 200
+    p.write_text(f"---\nname: x\ndescription: {long_text}\n---\n")
+    desc = _corpus._read_skill_description(p)
+    assert desc.endswith("…")
+    assert len(desc) == 198  # 197 + ellipsis char
+
+
+def test_synthesize_baseline_extracts_h2_headings_from_claude_md(tmp_path: Path) -> None:
+    """`synthesize_baseline` walks each repo's CLAUDE.md and counts ## sections.
+
+    Targets `_agent_claude_md_sections` (CLAUDE.md read + h2 parsing) and
+    the `sections_per_repo[section] += 1` accumulation in
+    `synthesize_baseline`.
+    """
+    # Two repos; both share two ## headings, one repo has a unique one.
+    # Also exercises: non-h2 lines (#, ###) ignored, empty `## ` rejected.
+    repo_a = _make_repo(tmp_path, "alpha", [{"suffix": "a", "backend": "claude"}])
+    (repo_a / "CLAUDE.md").write_text(
+        "# Top-level (ignored)\n"
+        "## Workspace layout\n"
+        "blah\n"
+        "## Skills convention\n"
+        "### Sub-section (ignored)\n"
+        "## \n"  # empty title — must be rejected
+        "## Alpha-only section\n"
+    )
+    repo_b = _make_repo(tmp_path, "beta", [{"suffix": "b", "backend": "claude"}])
+    (repo_b / "CLAUDE.md").write_text("## Workspace layout\n## Skills convention\n")
+    agents, _errors = _corpus.discover_agents(tmp_path)
+    baseline = _corpus.synthesize_baseline(agents)
+
+    # Both repos carry both shared sections → required (2/2 = 100%).
+    assert "Workspace layout" in baseline.required_claude_md_sections
+    assert "Skills convention" in baseline.required_claude_md_sections
+    # Only one repo has "Alpha-only section" — 1/2 = 50% → recommended.
+    assert "Alpha-only section" in baseline.recommended_claude_md_sections
+    # Empty title was filtered.
+    assert "" not in baseline.required_claude_md_sections
+    assert "" not in baseline.recommended_claude_md_sections
