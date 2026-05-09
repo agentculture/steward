@@ -52,9 +52,11 @@ chmod +x .claude/skills/{{SKILL}}/scripts/*.sh 2>/dev/null || true
 #    - SKILL.md prose framing: replace "steward" with your repo
 #      name where it identifies the consumer (NOT where it cites
 #      steward as the upstream).
-#    - For any script that hard-codes a signature literal
-#      (e.g. communicate/scripts/post-issue.sh signs
-#      `- steward (Claude)`), change it to `- <your-repo> (Claude)`.
+#    - For any script that hard-codes a signature literal, change it
+#      to `- <your-repo> (Claude)`. (The communicate skill no longer
+#      hard-codes one — agtag resolves the nick from your local
+#      `culture.yaml`. If your repo is missing one, add it or pass
+#      `--as <your-repo>` at the call site.)
 
 # 3. Update docs/skill-sources.md (if present) to point at the
 #    new path; drop any stale row for the old name.

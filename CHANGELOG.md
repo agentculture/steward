@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-05-10
+
+### Added
+
+- **`communicate/scripts/post-comment.sh`.** New verb wrapping
+  `agtag issue reply` for follow-ups on existing cross-repo issues.
+  Same `--repo` / `--number` / `--body-file` / stdin ergonomics as
+  `post-issue.sh`. Auto-signed by agtag from the local
+  `culture.yaml`.
+
+### Changed
+
+- **`communicate` skill is now backed by `agtag` (>=0.1) for issue
+  I/O.** `post-issue.sh` and `fetch-issues.sh` are thin wrappers
+  around `agtag issue post` and `agtag issue fetch` respectively.
+  Stable script paths and flag surfaces preserved, so existing
+  callers (notably `steward announce-skill-update`) keep working
+  unchanged. The hand-coded `- steward (Claude)` literal in
+  `post-issue.sh` is gone — agtag resolves the signing nick from the
+  local `culture.yaml` (override via agtag's `--as NICK`). For this
+  repo the resolved nick is still `steward`, so emitted signatures
+  are bit-identical. `mesh-message.sh` is unchanged pending agtag's
+  v0.2 mesh transport.
+- `communicate/SKILL.md` documents the agtag dependency, points at
+  `agtag learn` / `agtag explain agtag` for the surface docs instead
+  of re-documenting flags, and updates the per-channel signature
+  table to reflect `culture.yaml`-resolved nicks.
+- `docs/skill-sources.md` `communicate` row notes the agtag
+  dependency and signature semantics.
+- `communicate/scripts/templates/skill-update-brief.md` no longer
+  tells downstream vendors to edit a hard-coded signature literal in
+  `post-issue.sh` — it now points at `culture.yaml` / `--as` instead.
+
 ## [0.10.0] - 2026-05-09
 
 ### Added
