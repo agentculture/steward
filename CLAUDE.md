@@ -61,7 +61,33 @@ Every skill in `.claude/skills/<name>/` ships:
 
 Per-machine paths (Culture server manifest location, sibling-project paths, etc.) live in **`.claude/skills.local.yaml`** (git-ignored). A committed `.claude/skills.local.yaml.example` documents every key. Skills read the local file, falling back to the example when the local copy hasn't been created yet.
 
-Steward is a "skills supplier" for the Culture mesh. When a skill stabilizes here, the next step is propagating it to sibling projects (`culture`, `daria`, etc.) — the all-backends rule applied to skills.
+Steward is a "skills supplier" for the Culture mesh. The canonical
+upstream/downstream map lives in `docs/skill-sources.md`; that file's
+"Downstream copies" column is the source of truth for who consumes what.
+
+**When you ship a behavior change to a skill in this repo's
+`.claude/skills/<name>/`** (new script, changed flag surface,
+hardened existing script — anything beyond identifier-only or
+doc-only edits), broadcast a migration brief to the consumers
+listed in the ledger:
+
+```bash
+steward announce-skill-update --skill <name> --since <last-stable-version>
+```
+
+The verb renders the canonical six-section brief from live state
+(the upstream `scripts/` listing, the `CHANGELOG.md` excerpt since
+`<last-stable-version>`, and the consumer list from
+`docs/skill-sources.md`) and pipes it through this repo's
+`.claude/skills/communicate/scripts/post-issue.sh` per consumer. Use
+`--dry-run` to preview, `--list` to sanity-check the consumer list.
+Don't broadcast on identifier-only or doc-only edits.
+
+If `docs/skill-sources.md`'s downstream column is missing a known
+consumer (e.g. a sibling whose `SKILL.md` openly cites
+`vendored from ../steward/...`), edit the ledger first — the
+broadcast is only as good as the consumer list. The all-backends
+rule applied to skills.
 
 ## Roadmap (CLI surface)
 
