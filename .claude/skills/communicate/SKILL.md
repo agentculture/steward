@@ -2,31 +2,36 @@
 name: communicate
 description: >
   Cross-repo + mesh communication from steward: file tracked GitHub issues
-  on sibling repos, and send live messages to Culture mesh channels. Use
-  when the next step lives outside steward (a brief for a sibling-repo
-  agent, a status ping for a Culture channel). Issue posts auto-sign with
-  `- steward (Claude)`; mesh messages are unsigned (the IRC nick is the
-  speaker). Not for in-steward issues — use `gh issue create` or the
-  `cicd` skill for those. Renamed from `coordinate` in steward 0.8.0.
+  on sibling repos, fetch issues from sibling repos to inline current state
+  into briefs, and send live messages to Culture mesh channels. Use when
+  the next step lives outside steward (a brief for a sibling-repo agent, a
+  status ping for a Culture channel, or pulling an issue body + comments
+  into context). Issue posts auto-sign with `- steward (Claude)`; mesh
+  messages are unsigned (the IRC nick is the speaker). Not for in-steward
+  issues — use `gh issue create` or the `cicd` skill for those. Renamed
+  from `coordinate` in steward 0.8.0; absorbed `gh-issues` in 0.9.1.
 ---
 
 # Communicate (Cross-Repo + Mesh)
 
 Steward's job is alignment across the AgentCulture mesh; that surfaces in
-two distinct channels:
+three distinct channels:
 
 - **Tracked, async hand-offs** — a gap in another repo (a missing public
   API, a divergent skill, a documentation ask) where an agent on the
   other side needs to act, and the ask should outlive the conversation.
   → `post-issue.sh` (GitHub).
+- **Inbound state read** — pulling current issue body + comments from a
+  sibling repo so a brief or plan can inline what's there instead of
+  saying "see issue #N." → `fetch-issues.sh` (GitHub).
 - **Ephemeral coordination** — a status ping, a question, a "PR ready
   for merge" notice on a Culture mesh channel where the audience is
   already listening.
   → `mesh-message.sh` (Culture IRC).
 
-Both channels live under one skill because they share the same audience
+All three live under one skill because they share the same audience
 (sibling-repo agents) and the same red flag (don't double-post the same
-ask across both — pick one).
+ask across post + mesh — pick one).
 
 ## When to Use
 
@@ -45,6 +50,16 @@ ask across both — pick one).
 - You're asking a question where you expect a fast reply from whoever
   is listening on the channel right now.
 - You're announcing a decision that doesn't need a tracked artifact.
+
+### Fetch mode (`fetch-issues.sh`)
+
+- You're about to write a brief and want to inline the current state of
+  one or more sibling-repo issues (body + comments) instead of saying
+  "see issue #N."
+- You're triaging a list of cross-repo issues and want their bodies and
+  comments in one shot for context.
+- Avoids the `gh issue view` "Projects (classic) deprecated" error by
+  passing `--json` explicitly to GitHub.
 
 ## When NOT to Use
 
@@ -128,6 +143,20 @@ Body can also come from `--body-file PATH` or stdin. The script wraps
 unchanged, so failures (no Culture server, agent not connected) surface
 verbatim. No signature is appended — the IRC nick is the speaker.
 
+### Fetch sibling-repo issues
+
+```bash
+bash .claude/skills/communicate/scripts/fetch-issues.sh 191 --repo agentculture/culture
+bash .claude/skills/communicate/scripts/fetch-issues.sh 191-197 --repo agentculture/culture
+bash .claude/skills/communicate/scripts/fetch-issues.sh 191 195 197
+```
+
+Output is one JSON object per issue (separated by header bars) with
+`number`, `title`, `state`, `labels`, `body`, and `comments`. Without
+`--repo`, `gh` resolves the repo from the current git remote. Failures
+on a single issue print `ERROR: Could not fetch issue #N` and continue
+with the next one.
+
 Steward is **not** a registered mesh agent today (see the cicd SKILL.md
 note). The script works once steward has been registered and started
 via `culture agent register` + `culture start spark-steward`; until
@@ -139,6 +168,7 @@ which is the right behavior — fix the registration, don't paper over it.
 | Script | Purpose |
 |--------|---------|
 | `scripts/post-issue.sh` | Create a new issue on a target repo. Auto-signs `- steward (Claude)`. |
+| `scripts/fetch-issues.sh` | Fetch one or more issues (single / range / list) with body + comments. |
 | `scripts/mesh-message.sh` | Send a message to a Culture mesh channel. Unsigned (IRC nick is the speaker). |
 
 More scripts can land here as the communication footprint grows —

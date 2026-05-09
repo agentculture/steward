@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Fetch GitHub issues with full body and comments
-# Usage: gh-issues.sh [RANGE|NUMBER] [--repo OWNER/REPO]
-#   gh-issues.sh 191-197          # range
-#   gh-issues.sh 191              # single
-#   gh-issues.sh 191 192 195      # list
-#   gh-issues.sh --repo foo/bar 5 # explicit repo
+# Fetch GitHub issues with full body and comments.
+# Usage: fetch-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]
+#   fetch-issues.sh 191-197                   # range
+#   fetch-issues.sh 191                       # single
+#   fetch-issues.sh 191 192 195               # list
+#   fetch-issues.sh --repo foo/bar 5          # explicit repo (otherwise gh resolves it from the git remote)
+#
+# Passing --json explicitly avoids the gh "Projects (classic) deprecated"
+# error that bare `gh issue view <num>` triggers on issues attached to
+# a classic project board.
 
 set -euo pipefail
 
@@ -16,7 +20,7 @@ while [[ $# -gt 0 ]]; do
     --repo)
       if [[ $# -lt 2 || -z "$2" ]]; then
         echo "Error: --repo requires a value (OWNER/REPO)" >&2
-        echo "Usage: gh-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]" >&2
+        echo "Usage: fetch-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]" >&2
         exit 1
       fi
       REPO_FLAG="--repo $2"
@@ -30,7 +34,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#NUMBERS[@]} -eq 0 ]]; then
-  echo "Usage: gh-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]" >&2
+  echo "Usage: fetch-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]" >&2
   exit 1
 fi
 
