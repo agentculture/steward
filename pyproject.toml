@@ -1,6 +1,6 @@
 [project]
 name = "steward-cli"
-version = "0.9.1"
+version = "0.9.2"
 description = "Steward — aligns and maintains resident agents across Culture projects."
 readme = "README.md"
 license = "MIT"

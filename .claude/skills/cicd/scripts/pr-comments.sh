@@ -105,12 +105,22 @@ echo "$REVIEWS_WITH_BODY" | jq -r '
 # ── Section 4: SonarCloud new issues ──────────────────────────────────────
 # Public API; no auth needed for public projects. Project key defaults to
 # the GitHub `<owner>_<repo>` convention; override with SONAR_PROJECT_KEY.
+# URL-encode the key so override values containing `&`, `=`, or whitespace
+# don't corrupt the query string. Capture curl's exit separately so a real
+# transport failure doesn't masquerade as "project not registered."
 SONAR_KEY="${SONAR_PROJECT_KEY:-${REPO%%/*}_${REPO##*/}}"
-SONAR_RAW=$(curl -fsS "https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_KEY}&pullRequest=${PR_NUMBER}&ps=100" 2>/dev/null || echo '{}')
+SONAR_KEY_URI=$(jq -nr --arg v "$SONAR_KEY" '$v|@uri')
+SONAR_PS=500
+SONAR_CURL_OK=1
+SONAR_RAW=$(curl -fsS "https://sonarcloud.io/api/issues/search?componentKeys=${SONAR_KEY_URI}&pullRequest=${PR_NUMBER}&ps=${SONAR_PS}" 2>/dev/null) || SONAR_CURL_OK=0
 
-if echo "$SONAR_RAW" | jq -e 'has("issues")' >/dev/null 2>&1; then
+echo ""
+if [[ "$SONAR_CURL_OK" -ne 1 ]]; then
+    echo "════════════════ SONARCLOUD NEW ISSUES ════════════════"
+    echo "(curl failed contacting sonarcloud.io — section skipped; check network/rate-limit/API status)"
+elif echo "$SONAR_RAW" | jq -e 'has("issues")' >/dev/null 2>&1; then
     SONAR_COUNT=$(echo "$SONAR_RAW" | jq '.issues | length')
-    echo ""
+    SONAR_TOTAL=$(echo "$SONAR_RAW" | jq '.paging.total // .total // (.issues | length)')
     echo "════════════════ SONARCLOUD NEW ISSUES ($SONAR_COUNT) ════════════════"
     if [[ "$SONAR_COUNT" -gt 0 ]]; then
         echo "$SONAR_RAW" | jq -r '
@@ -121,8 +131,10 @@ if echo "$SONAR_RAW" | jq -e 'has("issues")' >/dev/null 2>&1; then
           ""
         '
     fi
+    if [[ "$SONAR_TOTAL" -gt "$SONAR_COUNT" ]]; then
+        echo "(warning: SonarCloud reports ${SONAR_TOTAL} issues but only ${SONAR_COUNT} fetched. Re-run with a higher ps or narrow by status.)"
+    fi
 else
-    echo ""
     echo "════════════════ SONARCLOUD NEW ISSUES ════════════════"
     echo "(project key '${SONAR_KEY}' not registered on sonarcloud.io — section skipped)"
 fi

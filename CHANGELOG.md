@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-05-09
+
+### Fixed
+
+- `cicd/scripts/pr-comments.sh` Section 4 (SonarCloud): three bugs caught
+  by qodo on culture's vendored copy of steward 0.9.0
+  ([culture#359](https://github.com/agentculture/culture/pull/359),
+  patched culture-side under a `# culture-divergence:` header in
+  [`41d0e28`](https://github.com/agentculture/culture/commit/41d0e28)).
+  Resolves [#19](https://github.com/agentculture/steward/issues/19).
+  - **Curl-error distinction.** A real transport failure (DNS, network,
+    rate-limit, SonarCloud outage) used to be swallowed by `|| echo '{}'`
+    and reported as "project not registered." Curl exit is now captured
+    separately and the script prints
+    `(curl failed contacting sonarcloud.io — section skipped; …)` so
+    operators can tell the two cases apart.
+  - **URL-encoded project key.** `SONAR_PROJECT_KEY` overrides containing
+    `&`, `=`, or whitespace no longer corrupt the query string; the value
+    is passed through `jq -nr '$v|@uri'` before splicing.
+  - **Higher `ps` cap with overflow warning.** Bumped `ps=100` → `ps=500`
+    and added a one-line warning when `paging.total > issues|length`, so
+    a noisy PR with >500 findings flags itself instead of silently
+    dropping the rest.
+
 ## [0.9.1] - 2026-05-09
 
 ### Added
