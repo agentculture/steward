@@ -34,7 +34,11 @@ def test_consumers_from_ledger_handles_em_dash() -> None:
 
 def test_consumers_from_ledger_extracts_first_backtick_token_per_chunk() -> None:
     """Each comma-separated chunk contributes its first backtick token."""
-    text = "| `cicd` | `steward` (...) | `cfafi` (still named `pr-review`), `culture` (still named `pr-review`) | n |\n"
+    text = (
+        "| `cicd` | `steward` (...) "
+        "| `cfafi` (still named `pr-review`), `culture` (still named `pr-review`) "
+        "| n |\n"
+    )
     assert asu._consumers_from_ledger(text, "cicd") == ["cfafi", "culture"]
 
 
@@ -110,13 +114,18 @@ def test_dry_run_renders_six_canonical_sections(
 ) -> None:
     """The brief renders the six canonical headers from the template."""
     monkeypatch.chdir(REPO_ROOT)
-    rc = main([
-        "announce-skill-update",
-        "--skill", "cicd",
-        "--to", "agentculture/auntiepypi",
-        "--since", "0.6.0",
-        "--dry-run",
-    ])
+    rc = main(
+        [
+            "announce-skill-update",
+            "--skill",
+            "cicd",
+            "--to",
+            "agentculture/auntiepypi",
+            "--since",
+            "0.6.0",
+            "--dry-run",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 0, captured.err
     body = captured.out
@@ -137,13 +146,18 @@ def test_dry_run_lists_every_upstream_script(
 ) -> None:
     """The brief lists every file currently in the upstream scripts/ dir."""
     monkeypatch.chdir(REPO_ROOT)
-    rc = main([
-        "announce-skill-update",
-        "--skill", "cicd",
-        "--to", "agentculture/auntiepypi",
-        "--since", "0.6.0",
-        "--dry-run",
-    ])
+    rc = main(
+        [
+            "announce-skill-update",
+            "--skill",
+            "cicd",
+            "--to",
+            "agentculture/auntiepypi",
+            "--since",
+            "0.6.0",
+            "--dry-run",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 0
     scripts_dir = REPO_ROOT / ".claude" / "skills" / "cicd" / "scripts"
@@ -161,11 +175,14 @@ def test_dry_run_with_no_consumers_errors_clearly(
     # version-bump exists in the ledger with `cfafi, afi-cli` consumers,
     # so use a skill with no ledger row by passing a real skill name that
     # has no downstream entry. agent-config has `—` in the consumers cell.
-    rc = main([
-        "announce-skill-update",
-        "--skill", "agent-config",
-        "--dry-run",
-    ])
+    rc = main(
+        [
+            "announce-skill-update",
+            "--skill",
+            "agent-config",
+            "--dry-run",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 1
     assert "no consumers found" in captured.err
@@ -199,13 +216,19 @@ def test_post_invokes_post_issue_with_expected_argv_and_stdin_body(
         return mock.Mock(returncode=0, stdout="https://github.com/x/y/issues/1\n", stderr="")
 
     with mock.patch.object(asu.subprocess, "run", side_effect=fake_run):
-        rc = main([
-            "announce-skill-update",
-            "--skill", "cicd",
-            "--to", "agentculture/auntiepypi",
-            "--to", "agentculture/cfafi",
-            "--since", "0.6.0",
-        ])
+        rc = main(
+            [
+                "announce-skill-update",
+                "--skill",
+                "cicd",
+                "--to",
+                "agentculture/auntiepypi",
+                "--to",
+                "agentculture/cfafi",
+                "--since",
+                "0.6.0",
+            ]
+        )
     capsys.readouterr()  # drain
     assert rc == 0
     assert len(captured_calls) == 2
@@ -232,13 +255,18 @@ def test_since_with_unknown_version_errors_clearly(
     not silently inline the entire CHANGELOG.
     """
     monkeypatch.chdir(REPO_ROOT)
-    rc = main([
-        "announce-skill-update",
-        "--skill", "cicd",
-        "--to", "agentculture/auntiepypi",
-        "--since", "99.99.99",
-        "--dry-run",
-    ])
+    rc = main(
+        [
+            "announce-skill-update",
+            "--skill",
+            "cicd",
+            "--to",
+            "agentculture/auntiepypi",
+            "--since",
+            "99.99.99",
+            "--dry-run",
+        ]
+    )
     captured = capsys.readouterr()
     assert rc == 1
     assert "--since 99.99.99 not found" in captured.err
@@ -255,12 +283,17 @@ def test_post_oserror_surfaces_env_error_not_unexpected(
     """
     monkeypatch.chdir(REPO_ROOT)
     with mock.patch.object(asu.subprocess, "run", side_effect=OSError("Exec format error")):
-        rc = main([
-            "announce-skill-update",
-            "--skill", "cicd",
-            "--to", "agentculture/auntiepypi",
-            "--since", "0.6.0",
-        ])
+        rc = main(
+            [
+                "announce-skill-update",
+                "--skill",
+                "cicd",
+                "--to",
+                "agentculture/auntiepypi",
+                "--since",
+                "0.6.0",
+            ]
+        )
     captured = capsys.readouterr()
     assert rc == 2  # EXIT_ENV_ERROR
     assert "could not execute" in captured.err

@@ -26,9 +26,7 @@ from steward.cli._errors import EXIT_ENV_ERROR, EXIT_USER_ERROR, StewardError
 from steward.cli._output import emit_diagnostic, emit_result
 
 POST_ISSUE_RELPATH = Path(".claude/skills/communicate/scripts/post-issue.sh")
-TEMPLATE_RELPATH = Path(
-    ".claude/skills/communicate/scripts/templates/skill-update-brief.md"
-)
+TEMPLATE_RELPATH = Path(".claude/skills/communicate/scripts/templates/skill-update-brief.md")
 LEDGER_RELPATH = Path("docs/skill-sources.md")
 CHANGELOG_RELPATH = Path("CHANGELOG.md")
 SKILLS_RELPATH = Path(".claude/skills")
@@ -289,13 +287,9 @@ def _handle(args: argparse.Namespace) -> int:
                 message=f"--since {args.since} not found in CHANGELOG.md",
                 remediation="pass an existing version (see CHANGELOG headings)",
             )
-        changelog_block = _changelog_excerpt(
-            changelog_text, since=args.since, skill=args.skill
-        )
+        changelog_block = _changelog_excerpt(changelog_text, since=args.since, skill=args.skill)
         if not changelog_block.strip():
-            changelog_block = (
-                f"_(no CHANGELOG entries mention `{args.skill}` since cutoff)_"
-            )
+            changelog_block = f"_(no CHANGELOG entries mention `{args.skill}` since cutoff)_"
     else:
         changelog_block = f"_(no CHANGELOG.md found at {CHANGELOG_RELPATH})_"
 
