@@ -24,10 +24,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - **URL-encoded project key.** `SONAR_PROJECT_KEY` overrides containing
     `&`, `=`, or whitespace no longer corrupt the query string; the value
     is passed through `jq -nr '$v|@uri'` before splicing.
-  - **Higher `ps` cap with overflow warning.** Bumped `ps=100` → `ps=500`
-    and added a one-line warning when `paging.total > issues|length`, so
-    a noisy PR with >500 findings flags itself instead of silently
-    dropping the rest.
+  - **Higher `ps` cap with overflow warning.** Bumped `ps=100` →
+    `ps=500` (overridable via `SONAR_PS=<n>`, matching the
+    `SONAR_PROJECT_KEY` override pattern already in this script) and
+    added a one-line warning when `paging.total > issues|length` that
+    quotes the exact `SONAR_PS=<total>` value to re-run with, so the
+    guidance is actionable instead of telling the operator to "raise ps"
+    with no knob to turn.
 
 ## [0.9.1] - 2026-05-09
 
