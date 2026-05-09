@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-05-09
+
+### Added
+
+- `communicate/scripts/fetch-issues.sh` — fetch GitHub issues with
+  body + comments via `gh issue view --json …`. Supports single issue,
+  range (`191-197`), list (`191 195 197`), and `--repo OWNER/REPO`.
+  Passing `--json` explicitly avoids the "Projects (classic) deprecated"
+  error that bare `gh issue view` triggers. Resolves
+  [#18](https://github.com/agentculture/steward/issues/18).
+
+### Changed
+
+- `communicate` skill description and SKILL.md updated to advertise three
+  channels (post / fetch / mesh) instead of two, so harness skill discovery
+  surfaces fetch-issues for prompts like "fetch issue #N".
+- `docs/skill-sources.md` — communicate row now mentions fetch; the
+  canonical-skills opening list dropped `gh-issues`.
+
+### Removed
+
+- Standalone `.claude/skills/gh-issues/` skill — its sole script
+  (`gh-issues.sh`) moved into `communicate` as `fetch-issues.sh` so
+  cross-repo issue I/O (post + fetch) lives in one skill, matching
+  communicate's mission.
+
+### Fixed
+
 ## [0.9.0] - 2026-05-08
 
 ### Added
