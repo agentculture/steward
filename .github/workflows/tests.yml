@@ -11,6 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Promote SONAR_TOKEN to job env so the SonarCloud step can gate on
+    # `env.SONAR_TOKEN != ''` — `secrets.*` isn't allowed in `if:`. This
+    # makes the step a no-op on fork PRs (where the secret isn't injected)
+    # and on any repo that hasn't configured the token yet, instead of
+    # failing the whole job.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -26,9 +33,9 @@ jobs:
       - run: uv run pytest -n auto --cov=steward --cov-report=xml:coverage.xml --cov-report=term -v
 
       - name: SonarCloud Scan
+        if: env.SONAR_TOKEN != ''
         uses: SonarSource/sonarqube-scan-action@689fb39b34b9aa95ebc5f8f119343ddd51542402 # v4
         env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
   lint:
