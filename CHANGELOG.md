@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-05-09
+
+### Added
+
+- **CI-based SonarCloud analysis with code-coverage upload.** The
+  existing CI test job already produced `coverage.xml` (pytest-cov), but
+  nothing pushed it to SonarCloud — auto-analysis can't ingest external
+  coverage, so the bot's "Coverage on New Code" line read `0.0%` on
+  every PR. Now wired:
+  - New `sonar-project.properties` at repo root declares the project key
+    (`agentculture_steward`), source/test layout, and
+    `sonar.python.coverage.reportPaths=coverage.xml`.
+  - `.github/workflows/tests.yml` adds a `SonarSource/sonarqube-scan-action`
+    step after pytest, with `SONAR_TOKEN` from repo secrets and
+    `fetch-depth: 0` on checkout (Sonar needs full git history for
+    accurate "new code" blame attribution).
+  - **Manual prerequisite (one-time):** disable Auto-Analysis in
+    SonarCloud (Project → Administration → Analysis Method → switch to
+    "Use CI-based analysis"). Otherwise the auto-analysis run races the
+    CI scan and the coverage upload is ignored.
+
+### Removed
+
+- The "(0.0% Coverage on New Code)" embarrassment from PR comments.
+
 ## [0.9.2] - 2026-05-09
 
 ### Fixed
