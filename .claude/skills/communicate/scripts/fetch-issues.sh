@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-REPO_FLAG=""
+REPO_ARGS=()
 NUMBERS=()
 
 while [[ $# -gt 0 ]]; do
@@ -23,7 +23,9 @@ while [[ $# -gt 0 ]]; do
         echo "Usage: fetch-issues.sh [RANGE|NUMBER...] [--repo OWNER/REPO]" >&2
         exit 1
       fi
-      REPO_FLAG="--repo $2"
+      # Pass --repo and its value as separate argv elements so a value
+      # that contains whitespace can't word-split into extra gh args.
+      REPO_ARGS=(--repo "$2")
       shift 2 ;;
     *-*)  # range like 191-197
       IFS='-' read -r start end <<< "$1"
@@ -42,8 +44,7 @@ for num in "${NUMBERS[@]}"; do
   echo "========================================"
   echo "ISSUE #${num}"
   echo "========================================"
-  # shellcheck disable=SC2086
-  gh issue view "$num" $REPO_FLAG --json number,title,state,labels,body,comments \
+  gh issue view "$num" "${REPO_ARGS[@]}" --json number,title,state,labels,body,comments \
     --jq '{
       number: .number,
       title: .title,
