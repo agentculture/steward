@@ -43,6 +43,20 @@ ask across post + mesh — pick one).
 - You're asking a question that benefits from a tracked artifact rather
   than ephemeral chat.
 
+### Broadcast mode (`steward announce-skill-update`)
+
+- You bumped a skill in `.claude/skills/<name>/` and the change is
+  more than identifier-only or doc-only — downstream consumers will
+  benefit from re-vendoring.
+- Don't hand-author the brief — the `steward announce-skill-update`
+  verb (steward-cli) renders the canonical six-section form (what's
+  stale, cite locations, what's in upstream now, recipe, acceptance
+  criteria, references) from the live state of
+  `.claude/skills/<name>/scripts/`, the `CHANGELOG.md`, and
+  `docs/skill-sources.md`'s downstream column. Then it pipes through
+  this skill's `post-issue.sh` per consumer (so the auto-signature
+  stays consistent with hand-authored briefs).
+
 ### Mesh mode (`mesh-message.sh`)
 
 - You want to ping a Culture channel with a status update ("PR #N ready
@@ -130,6 +144,45 @@ The script prints the issue URL on success — capture it for
 cross-references in your spec / plan / PR description. The signature
 `- steward (Claude)` is auto-appended at the end of the body.
 
+### Broadcast a skill update to known consumers
+
+This is steward's role specifically — the verb lives in `steward-cli`,
+not in this skill's `scripts/`. Downstream vendors of `communicate`
+(cfafi, culture, auntiepypi, …) do not get a broadcast wrapper because
+they don't broadcast — they only use the primitives above
+(`post-issue.sh`, `fetch-issues.sh`, `mesh-message.sh`).
+
+```bash
+# Default: read consumers from docs/skill-sources.md "Downstream copies"
+# cell for <skill>; render the six-section brief; pipe to post-issue.sh
+# for each consumer.
+steward announce-skill-update --skill cicd --since 0.6.0
+
+# Override the consumer list (skips the ledger lookup entirely):
+steward announce-skill-update --skill cicd \
+    --to agentculture/auntiepypi --to agentculture/cfafi
+
+# Preview without posting:
+steward announce-skill-update --skill cicd \
+    --to agentculture/auntiepypi --dry-run
+
+# Just print the consumer list (for ledger sanity-checks):
+steward announce-skill-update --skill cicd --list
+```
+
+`--since VERSION` controls which CHANGELOG entries get inlined (every
+entry from the top down to but not including the cutoff version).
+Without it, the verb keyword-filters CHANGELOG entries to those
+mentioning the skill name. `--note-file PATH` appends free-text under
+the upstream script list for skill-specific gotchas the generic
+template can't anticipate (e.g. "this skill's `post-issue.sh`
+hard-codes a signature literal — your vendor must change it"). The
+brief is rendered once and reused across consumers; per-consumer
+failures stream to stderr and the verb exits 1 if any failed. The
+template lives at
+`scripts/templates/skill-update-brief.md` so future supplier-role
+repos can render their own briefs from the same shape.
+
 ### Send a mesh channel message
 
 ```bash
@@ -170,6 +223,7 @@ which is the right behavior — fix the registration, don't paper over it.
 | `scripts/post-issue.sh` | Create a new issue on a target repo. Auto-signs `- steward (Claude)`. |
 | `scripts/fetch-issues.sh` | Fetch one or more issues (single / range / list) with body + comments. |
 | `scripts/mesh-message.sh` | Send a message to a Culture mesh channel. Unsigned (IRC nick is the speaker). |
+| `scripts/templates/skill-update-brief.md` | The Markdown template consumed by `steward announce-skill-update` (the broadcast verb lives in steward-cli, not in this skill). Six fixed sections; placeholder syntax `{{NAME}}`. |
 
 More scripts can land here as the communication footprint grows —
 `post-comment.sh` for issue follow-ups, `mesh-ask.sh` for

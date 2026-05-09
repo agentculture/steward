@@ -32,6 +32,7 @@ class _StewardArgumentParser(argparse.ArgumentParser):
 def _build_parser() -> argparse.ArgumentParser:
     # Deferred import to avoid coupling the parser module to the command modules
     # at import time (matches afi-cli's pattern; cheap insurance).
+    from steward.cli._commands import announce_skill_update as _asu_cmd
     from steward.cli._commands import doctor as _doctor_cmd
     from steward.cli._commands import show as _show_cmd
 
@@ -48,6 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     _show_cmd.register(sub)
     _doctor_cmd.register(sub)
+    _asu_cmd.register(sub)
 
     return parser
 

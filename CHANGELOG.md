@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-05-09
+
+### Added
+
+- **`steward announce-skill-update` CLI verb.** Broadcasts a migration
+  brief to consumers of a vendored skill: parses
+  `docs/skill-sources.md` "Downstream copies" cell for the named
+  skill, lists the upstream `scripts/`, excerpts `CHANGELOG.md` (since
+  `--since VERSION` cutoff or keyword-filtered by skill name), renders
+  the canonical six-section template, and pipes through this repo's
+  `.claude/skills/communicate/scripts/post-issue.sh` per consumer (so
+  the auto-signature `- steward (Claude)` stays consistent).
+  - Flags: `--skill NAME` (required), `--to OWNER/REPO` (repeat,
+    overrides ledger), `--org ORG` (default `agentculture`),
+    `--since VERSION`, `--note-file PATH`, `--title TITLE`,
+    `--dry-run`, `--list`.
+  - Lifts orchestration that briefly lived in
+    `.claude/skills/communicate/scripts/announce-skill-update.sh` (a
+    bash wrapper added earlier on this branch and never released)
+    into the CLI per the skills-portability principle: downstream
+    vendors of `communicate` don't need steward's broadcast logic;
+    they only use the primitive `post-issue.sh`.
+- 14 unit tests in `tests/test_cli_announce_skill_update.py` covering
+  ledger parsing, changelog excerpt (with-cutoff and keyword-filter
+  modes), repo normalization, `--list`, `--dry-run` rendering, error
+  paths, and a subprocess-mocked `--to`-repeat post that asserts the
+  argv shape handed to `post-issue.sh`.
+- `.claude/skills/communicate/scripts/templates/skill-update-brief.md`
+  — the six-section brief template the CLI verb renders.
+
+### Changed
+
+- `CLAUDE.md` "skills supplier" rule and
+  `.claude/skills/communicate/SKILL.md` Broadcast section now point
+  at `steward announce-skill-update` instead of a bash path.
+- `communicate/SKILL.md` Scripts table drops the (never-released)
+  wrapper row; the template row remains, noting that the verb in
+  steward-cli consumes it.
+
 ## [0.9.4] - 2026-05-09
 
 ### Added
