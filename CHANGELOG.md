@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-05-09
+
+### Added
+
+- **Test coverage push: 88.93% → 95.25%.** PR #22 wired the SonarCloud
+  coverage upload but the bot was reporting an honest 88.9% on every
+  PR; this release adds 17 targeted tests across two new files
+  (`tests/test_cli_show.py`, `tests/test_version_fallback.py`) and the
+  existing `tests/test_cli_doctor.py` / `tests/test_corpus.py`. New
+  coverage hits the easy + medium uncovered lines:
+  - `_check_skills_convention` — missing SKILL.md and missing
+    frontmatter-`name:` branches.
+  - `cli._dispatch` catch-all — non-`StewardError` exceptions get
+    wrapped instead of leaking a traceback.
+  - `show.py` — running outside any git repo, propagating non-zero
+    script exit + stderr, and `OSError` from a non-executable script.
+  - `_corpus.py` — `_classify` empty-counter, non-dict YAML rows,
+    malformed/missing SKILL.md frontmatter (5 sub-paths), description
+    truncation past 200 chars, CLAUDE.md `##` heading extraction,
+    and the `synthesize_perfect_patient` wrapper.
+  - `_errors.py` — `StewardError.to_dict()` round-trip.
+  - `__init__.py` — `PackageNotFoundError` version fallback (run via a
+    Python subprocess that monkeypatches `importlib.metadata.version`,
+    since the test environment always has the package installed).
+  Test count: 75 → 92. The remaining ~5% is structurally hard (subprocess
+  coverage of `__main__.py`, OSError on file I/O during write_repo_report)
+  and is documented in the new test-file headers so future readers don't
+  chase ghosts.
+
 ## [0.9.3] - 2026-05-09
 
 ### Added
