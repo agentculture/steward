@@ -183,18 +183,19 @@ def test_missing_skill_arg_errors(
     assert "--skill" in captured.err
 
 
-def test_post_invokes_post_issue_with_expected_argv(
+def test_post_invokes_post_issue_with_expected_argv_and_stdin_body(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-dry-run invocation calls post-issue.sh once per consumer
-    with the right --repo / --title / --body-file argv shape.
+    with `--repo` / `--title` argv and the brief body piped on stdin
+    (no `--body-file`, no repo-local staging directory).
     """
     monkeypatch.chdir(REPO_ROOT)
-    captured_calls: list[list[str]] = []
+    captured_calls: list[tuple[list[str], str | None]] = []
 
     def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
-        captured_calls.append(list(argv))
+        captured_calls.append((list(argv), kwargs.get("input")))
         return mock.Mock(returncode=0, stdout="https://github.com/x/y/issues/1\n", stderr="")
 
     with mock.patch.object(asu.subprocess, "run", side_effect=fake_run):
@@ -208,10 +209,73 @@ def test_post_invokes_post_issue_with_expected_argv(
     capsys.readouterr()  # drain
     assert rc == 0
     assert len(captured_calls) == 2
-    for argv in captured_calls:
+    for argv, stdin_body in captured_calls:
         assert argv[0].endswith("post-issue.sh")
         assert "--repo" in argv
         assert "--title" in argv
-        assert "--body-file" in argv
-    repos_called = [argv[argv.index("--repo") + 1] for argv in captured_calls]
+        assert "--body-file" not in argv  # bug #3 fix: stdin, not file
+        assert stdin_body is not None and "## What's stale" in stdin_body
+    repos_called = [argv[argv.index("--repo") + 1] for argv, _ in captured_calls]
     assert repos_called == ["agentculture/auntiepypi", "agentculture/cfafi"]
+    # bug #3 fix: no repo-local staging directory should be created.
+    assert not (REPO_ROOT / ".local" / "announce-skill-update.body.md").exists()
+
+
+# ---------- Qodo PR #24 review feedback ----------
+
+
+def test_since_with_unknown_version_errors_clearly(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bug #1: --since with a version not in CHANGELOG must fail fast,
+    not silently inline the entire CHANGELOG.
+    """
+    monkeypatch.chdir(REPO_ROOT)
+    rc = main([
+        "announce-skill-update",
+        "--skill", "cicd",
+        "--to", "agentculture/auntiepypi",
+        "--since", "99.99.99",
+        "--dry-run",
+    ])
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert "--since 99.99.99 not found" in captured.err
+    assert "pass an existing version" in captured.err
+
+
+def test_post_oserror_surfaces_env_error_not_unexpected(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bug #2: subprocess.run raising OSError (missing/non-exec script)
+    must classify as EXIT_ENV_ERROR with a chmod hint, matching
+    doctor.py's pattern.
+    """
+    monkeypatch.chdir(REPO_ROOT)
+    with mock.patch.object(asu.subprocess, "run", side_effect=OSError("Exec format error")):
+        rc = main([
+            "announce-skill-update",
+            "--skill", "cicd",
+            "--to", "agentculture/auntiepypi",
+            "--since", "0.6.0",
+        ])
+    captured = capsys.readouterr()
+    assert rc == 2  # EXIT_ENV_ERROR
+    assert "could not execute" in captured.err
+    assert "post-issue.sh" in captured.err
+    assert "chmod +x" in captured.err
+    # Must NOT be the generic _dispatch fallback wrapper.
+    assert "unexpected" not in captured.err
+
+
+def test_consumers_from_ledger_handles_multi_skill_first_cell() -> None:
+    """Bug #4: ledger rows with multiple backticked skill names in the
+    first cell (e.g. `cfafi`, `cfafi-write`) must still match for any
+    of the listed names.
+    """
+    text = "| `cfafi`, `cfafi-write` | `cfafi` (...) | `someconsumer` | n |\n"
+    assert asu._consumers_from_ledger(text, "cfafi") == ["someconsumer"]
+    assert asu._consumers_from_ledger(text, "cfafi-write") == ["someconsumer"]
+    assert asu._consumers_from_ledger(text, "unrelated") == []

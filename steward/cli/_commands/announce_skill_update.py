@@ -86,12 +86,17 @@ def _consumers_from_ledger(ledger_text: str, skill: str) -> list[str]:
     backtick-wrapped token is the consumer's bare repo name. An em-dash
     (``—``) or hyphen marker means no recorded consumers.
     """
-    skill_token = f"`{skill}`"
     for line in ledger_text.splitlines():
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.split("|")[1:-1]]
-        if len(cells) < 3 or cells[0] != skill_token:
+        if len(cells) < 3:
+            continue
+        # First cell may list multiple backticked skill names
+        # (e.g. `cfafi`, `cfafi-write` in the ledger today). Extract all
+        # tokens and check membership rather than exact-match the cell.
+        skill_tokens = re.findall(r"`([^`]+)`", cells[0])
+        if skill not in skill_tokens:
             continue
         cell = cells[2]
         if cell in ("", "—", "-"):
@@ -274,8 +279,18 @@ def _handle(args: argparse.Namespace) -> int:
 
     changelog_path = repo_root / CHANGELOG_RELPATH
     if changelog_path.is_file():
+        changelog_text = changelog_path.read_text()
+        if args.since is not None and f"## [{args.since}]" not in changelog_text:
+            # Without this guard, _changelog_excerpt's exact-match cutoff
+            # never trips and we'd inline the entire CHANGELOG into the
+            # brief — silently producing an oversized, misleading post.
+            raise StewardError(
+                code=EXIT_USER_ERROR,
+                message=f"--since {args.since} not found in CHANGELOG.md",
+                remediation="pass an existing version (see CHANGELOG headings)",
+            )
         changelog_block = _changelog_excerpt(
-            changelog_path.read_text(), since=args.since, skill=args.skill
+            changelog_text, since=args.since, skill=args.skill
         )
         if not changelog_block.strip():
             changelog_block = (
@@ -316,25 +331,28 @@ def _handle(args: argparse.Namespace) -> int:
     for repo in consumers:
         emit_diagnostic(f">>> {repo}")
         # bandit S603: argv is a fixed list; repo / title come from
-        # validated argparse input; body is passed via --body-file
-        # (a tempfile we write here), never via the shell.
-        body_file = repo_root / ".local" / "announce-skill-update.body.md"
-        body_file.parent.mkdir(parents=True, exist_ok=True)
-        body_file.write_text(brief)
+        # validated argparse input; body is piped on stdin (post-issue.sh
+        # supports it via `[[ ! -t 0 ]]`), never expanded by the shell.
+        # Stdin avoids the repo-local staging file the earlier
+        # implementation used (which polluted the working tree under
+        # .local/ and could clobber concurrent runs).
         try:
             completed = subprocess.run(  # noqa: S603
-                [
-                    str(post_issue),
-                    "--repo", repo,
-                    "--title", title,
-                    "--body-file", str(body_file),
-                ],
+                [str(post_issue), "--repo", repo, "--title", title],
+                input=brief,
                 check=False,
                 capture_output=True,
                 text=True,
             )
-        finally:
-            body_file.unlink(missing_ok=True)
+        except OSError as exc:
+            # Match doctor.py:172-186 — surface env errors with a
+            # remediation hint instead of letting _dispatch wrap as
+            # "unexpected".
+            raise StewardError(
+                code=EXIT_ENV_ERROR,
+                message=f"could not execute {post_issue} (consumer {repo}): {exc}",
+                remediation="ensure the script exists and is executable (chmod +x)",
+            ) from exc
         if completed.stdout:
             sys.stdout.write(completed.stdout)
         if completed.stderr:
