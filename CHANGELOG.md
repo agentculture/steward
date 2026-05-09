@@ -23,7 +23,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     script exit + stderr, and `OSError` from a non-executable script.
   - `_corpus.py` — `_classify` empty-counter, non-dict YAML rows,
     malformed/missing SKILL.md frontmatter (5 sub-paths), description
-    truncation past 200 chars, CLAUDE.md `## ` heading extraction,
+    truncation past 200 chars, CLAUDE.md `##` heading extraction,
     and the `synthesize_perfect_patient` wrapper.
   - `_errors.py` — `StewardError.to_dict()` round-trip.
   - `__init__.py` — `PackageNotFoundError` version fallback (run via a
