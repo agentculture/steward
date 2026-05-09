@@ -232,27 +232,26 @@ def register(sub: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_handle)
 
 
-def _handle(args: argparse.Namespace) -> int:
-    repo_root = _resolve_repo_root()
-
-    upstream_scripts_dir = repo_root / SKILLS_RELPATH / args.skill / "scripts"
-    if not upstream_scripts_dir.is_dir():
+def _resolve_skill_scripts_dir(repo_root: Path, skill: str) -> Path:
+    scripts_dir = repo_root / SKILLS_RELPATH / skill / "scripts"
+    if not scripts_dir.is_dir():
         raise StewardError(
             code=EXIT_USER_ERROR,
-            message=f"no upstream skill at .claude/skills/{args.skill}/scripts/",
+            message=f"no upstream skill at .claude/skills/{skill}/scripts/",
             remediation="check spelling, or vendor the skill into this repo first",
         )
+    return scripts_dir
 
+
+def _resolve_consumers(args: argparse.Namespace, repo_root: Path) -> list[str]:
     if args.to:
-        consumers = [_normalize_repo(r, org=args.org) for r in args.to]
+        bare_names: list[str] = list(args.to)
     else:
         ledger_path = repo_root / LEDGER_RELPATH
         ledger_text = ledger_path.read_text() if ledger_path.is_file() else ""
-        consumers = [
-            _normalize_repo(c, org=args.org)
-            for c in _consumers_from_ledger(ledger_text, args.skill)
-        ]
+        bare_names = _consumers_from_ledger(ledger_text, args.skill)
 
+    consumers = [_normalize_repo(c, org=args.org) for c in bare_names]
     if not consumers:
         raise StewardError(
             code=EXIT_USER_ERROR,
@@ -262,11 +261,10 @@ def _handle(args: argparse.Namespace) -> int:
                 "entry to docs/skill-sources.md"
             ),
         )
+    return consumers
 
-    if args.list_only:
-        emit_result("\n".join(consumers))
-        return 0
 
+def _resolve_template(repo_root: Path) -> Path:
     template_path = repo_root / TEMPLATE_RELPATH
     if not template_path.is_file():
         raise StewardError(
@@ -274,89 +272,114 @@ def _handle(args: argparse.Namespace) -> int:
             message=f"missing brief template at {TEMPLATE_RELPATH}",
             remediation="restore the template from steward main",
         )
+    return template_path
 
+
+def _build_changelog_block(repo_root: Path, *, since: str | None, skill: str) -> str:
     changelog_path = repo_root / CHANGELOG_RELPATH
-    if changelog_path.is_file():
-        changelog_text = changelog_path.read_text()
-        if args.since is not None and f"## [{args.since}]" not in changelog_text:
-            # Without this guard, _changelog_excerpt's exact-match cutoff
-            # never trips and we'd inline the entire CHANGELOG into the
-            # brief — silently producing an oversized, misleading post.
-            raise StewardError(
-                code=EXIT_USER_ERROR,
-                message=f"--since {args.since} not found in CHANGELOG.md",
-                remediation="pass an existing version (see CHANGELOG headings)",
-            )
-        changelog_block = _changelog_excerpt(changelog_text, since=args.since, skill=args.skill)
-        if not changelog_block.strip():
-            changelog_block = f"_(no CHANGELOG entries mention `{args.skill}` since cutoff)_"
-    else:
-        changelog_block = f"_(no CHANGELOG.md found at {CHANGELOG_RELPATH})_"
+    if not changelog_path.is_file():
+        return f"_(no CHANGELOG.md found at {CHANGELOG_RELPATH})_"
 
-    note_block = ""
-    if args.note_file is not None:
-        if not args.note_file.is_file():
-            raise StewardError(
-                code=EXIT_USER_ERROR,
-                message=f"--note-file not found: {args.note_file}",
-                remediation="check the path",
-            )
-        note_block = "## Skill-specific notes\n\n" + args.note_file.read_text() + "\n"
+    changelog_text = changelog_path.read_text()
+    if since is not None and f"## [{since}]" not in changelog_text:
+        # Without this guard, _changelog_excerpt's exact-match cutoff
+        # never trips and we'd inline the entire CHANGELOG into the
+        # brief — silently producing an oversized, misleading post.
+        raise StewardError(
+            code=EXIT_USER_ERROR,
+            message=f"--since {since} not found in CHANGELOG.md",
+            remediation="pass an existing version (see CHANGELOG headings)",
+        )
+    block = _changelog_excerpt(changelog_text, since=since, skill=skill)
+    if not block.strip():
+        return f"_(no CHANGELOG entries mention `{skill}` since cutoff)_"
+    return block
 
-    upstream_scripts = _upstream_scripts(upstream_scripts_dir)
+
+def _build_note_block(note_file: Path | None) -> str:
+    if note_file is None:
+        return ""
+    if not note_file.is_file():
+        raise StewardError(
+            code=EXIT_USER_ERROR,
+            message=f"--note-file not found: {note_file}",
+            remediation="check the path",
+        )
+    return "## Skill-specific notes\n\n" + note_file.read_text() + "\n"
+
+
+def _emit_dry_run(title: str, brief: str, consumers: list[str]) -> int:
+    emit_result(f"TITLE: {title}\n")
+    emit_result(brief)
+    emit_result("--- Would post to: ---")
+    emit_result("\n".join(consumers))
+    return 0
+
+
+def _post_one(post_issue: Path, repo: str, title: str, brief: str) -> bool:
+    """Post to one consumer. Returns True on success; raises on env errors."""
+    emit_diagnostic(f">>> {repo}")
+    # bandit S603: argv is a fixed list; repo / title come from
+    # validated argparse input; body is piped on stdin (post-issue.sh
+    # supports it via `[[ ! -t 0 ]]`), never expanded by the shell.
+    # Stdin avoids the repo-local staging file the earlier
+    # implementation used (which polluted the working tree under
+    # .local/ and could clobber concurrent runs).
+    try:
+        completed = subprocess.run(  # noqa: S603
+            [str(post_issue), "--repo", repo, "--title", title],
+            input=brief,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        # Match doctor.py:172-186 — surface env errors with a
+        # remediation hint instead of letting _dispatch wrap as
+        # "unexpected".
+        raise StewardError(
+            code=EXIT_ENV_ERROR,
+            message=f"could not execute {post_issue} (consumer {repo}): {exc}",
+            remediation="ensure the script exists and is executable (chmod +x)",
+        ) from exc
+    if completed.stdout:
+        sys.stdout.write(completed.stdout)
+    if completed.stderr:
+        sys.stderr.write(completed.stderr)
+    if completed.returncode != 0:
+        emit_diagnostic(f"ERROR: post failed for {repo}")
+        return False
+    return True
+
+
+def _post_all(post_issue: Path, consumers: list[str], title: str, brief: str) -> int:
+    failures = sum(1 for repo in consumers if not _post_one(post_issue, repo, title, brief))
+    summary = f"posted: {len(consumers) - failures}/{len(consumers)}"
+    if failures:
+        summary += f"; failures: {failures}"
+    emit_diagnostic(summary)
+    return 1 if failures else 0
+
+
+def _handle(args: argparse.Namespace) -> int:
+    repo_root = _resolve_repo_root()
+    scripts_dir = _resolve_skill_scripts_dir(repo_root, args.skill)
+    consumers = _resolve_consumers(args, repo_root)
+
+    if args.list_only:
+        emit_result("\n".join(consumers))
+        return 0
+
     brief = _render_brief(
-        template_path,
+        _resolve_template(repo_root),
         skill=args.skill,
-        upstream_scripts=upstream_scripts,
-        changelog_block=changelog_block,
-        note_block=note_block,
+        upstream_scripts=_upstream_scripts(scripts_dir),
+        changelog_block=_build_changelog_block(repo_root, since=args.since, skill=args.skill),
+        note_block=_build_note_block(args.note_file),
     )
     title = args.title or f"Resync vendored `{args.skill}` skill from steward (auto-broadcast)"
 
     if args.dry_run:
-        emit_result(f"TITLE: {title}\n")
-        emit_result(brief)
-        emit_result("--- Would post to: ---")
-        emit_result("\n".join(consumers))
-        return 0
+        return _emit_dry_run(title, brief, consumers)
 
-    post_issue = repo_root / POST_ISSUE_RELPATH
-    failures = 0
-    for repo in consumers:
-        emit_diagnostic(f">>> {repo}")
-        # bandit S603: argv is a fixed list; repo / title come from
-        # validated argparse input; body is piped on stdin (post-issue.sh
-        # supports it via `[[ ! -t 0 ]]`), never expanded by the shell.
-        # Stdin avoids the repo-local staging file the earlier
-        # implementation used (which polluted the working tree under
-        # .local/ and could clobber concurrent runs).
-        try:
-            completed = subprocess.run(  # noqa: S603
-                [str(post_issue), "--repo", repo, "--title", title],
-                input=brief,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        except OSError as exc:
-            # Match doctor.py:172-186 — surface env errors with a
-            # remediation hint instead of letting _dispatch wrap as
-            # "unexpected".
-            raise StewardError(
-                code=EXIT_ENV_ERROR,
-                message=f"could not execute {post_issue} (consumer {repo}): {exc}",
-                remediation="ensure the script exists and is executable (chmod +x)",
-            ) from exc
-        if completed.stdout:
-            sys.stdout.write(completed.stdout)
-        if completed.stderr:
-            sys.stderr.write(completed.stderr)
-        if completed.returncode != 0:
-            emit_diagnostic(f"ERROR: post failed for {repo}")
-            failures += 1
-
-    emit_diagnostic(
-        f"posted: {len(consumers) - failures}/{len(consumers)}"
-        + (f"; failures: {failures}" if failures else "")
-    )
-    return 1 if failures else 0
+    return _post_all(repo_root / POST_ISSUE_RELPATH, consumers, title, brief)
