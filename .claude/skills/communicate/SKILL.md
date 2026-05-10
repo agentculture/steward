@@ -213,31 +213,22 @@ repos can render their own briefs from the same shape.
 #### Fast recipe — "brief sibling-repo Z on skill X"
 
 This shape of ask is a recipe, not a planning question. Skip plan
-mode. The four-line workflow:
+mode. The call site:
 
 ```bash
-# 1. (Optional) Tiny override note for skill-specific framing.
-echo "> Steward note: ..." > /tmp/note.md
-
-# 2. Dry-run, eyeball the rendered brief.
 steward announce-skill-update \
     --skill <name> --to <owner>/<repo> \
     --since <last-stable-version> \
     [--note-file /tmp/note.md] --dry-run
-
-# 3. Post for real (drop --dry-run).
-steward announce-skill-update \
-    --skill <name> --to <owner>/<repo> \
-    --since <last-stable-version> \
-    [--note-file /tmp/note.md]
 ```
 
-The verb prints the issue URL on success and exits non-zero on
-failure — that is the verification. Don't write parallel
-`gh issue list` / `gh issue view` checks unless the verb itself is
-what you're testing. `--to` overrides the ledger, so non-ledger
-consumers don't require a ledger edit first; they enter the ledger
-later when they confirm their vendored shape.
+Eyeball the rendered brief; drop `--dry-run` to post. The verb
+prints the issue URL on success and exits non-zero on failure —
+that is the verification. Don't write parallel `gh issue list` /
+`gh issue view` checks unless the verb itself is what you're
+testing. `--to` overrides the ledger, so non-ledger consumers
+don't require a ledger edit first; they enter the ledger later
+when they confirm their vendored shape.
 
 ### Comment on an existing issue
 
