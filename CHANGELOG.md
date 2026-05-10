@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-05-10
+
+### Added
+
+- **`communicate/SKILL.md`: "Fast recipe — 'brief sibling-repo Z on
+  skill X'" subsection** under the existing
+  `steward announce-skill-update` docs. Codifies the four-line
+  workflow (write optional `--note-file`, dry-run, eyeball, post)
+  for one-off briefs to non-ledger consumers, and names the verb's
+  exit code + printed issue URL as the verification — no parallel
+  `gh issue list` checks needed. Driven by post-broadcast
+  introspection on the 2026-05-10 agex-cli broadcast (three plan
+  rewrites for what was four bash commands).
+
 ## [0.11.0] - 2026-05-10
 
 ### Added

@@ -210,6 +210,26 @@ template lives at
 `scripts/templates/skill-update-brief.md` so future supplier-role
 repos can render their own briefs from the same shape.
 
+#### Fast recipe — "brief sibling-repo Z on skill X"
+
+This shape of ask is a recipe, not a planning question. Skip plan
+mode. The call site:
+
+```bash
+steward announce-skill-update \
+    --skill <name> --to <owner>/<repo> \
+    --since <last-stable-version> \
+    [--note-file /tmp/note.md] --dry-run
+```
+
+Eyeball the rendered brief; drop `--dry-run` to post. The verb
+prints the issue URL on success and exits non-zero on failure —
+that is the verification. Don't write parallel `gh issue list` /
+`gh issue view` checks unless the verb itself is what you're
+testing. `--to` overrides the ledger, so non-ledger consumers
+don't require a ledger edit first; they enter the ledger later
+when they confirm their vendored shape.
+
 ### Comment on an existing issue
 
 ```bash
