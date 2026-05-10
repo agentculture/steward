@@ -64,4 +64,8 @@ if [[ -z "$BODY_FILE" ]]; then
     BODY_FILE="$TMP_BODY"
 fi
 
-exec agtag issue post --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE"
+# Don't `exec` here: when stdin spooled the body to a tempfile we set an
+# EXIT trap to delete it, and exec would replace the shell before the trap
+# could run, leaking the spooled body on disk.
+agtag issue post --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE"
+exit $?

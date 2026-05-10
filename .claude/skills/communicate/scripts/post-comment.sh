@@ -59,4 +59,7 @@ if [[ -z "$BODY_FILE" ]]; then
     BODY_FILE="$TMP_BODY"
 fi
 
-exec agtag issue reply --repo "$REPO" --number "$NUMBER" --body-file "$BODY_FILE"
+# Don't `exec` here: see post-issue.sh for the rationale (stdin-spooled
+# tempfile + EXIT trap; exec would skip the trap and leak the body).
+agtag issue reply --repo "$REPO" --number "$NUMBER" --body-file "$BODY_FILE"
+exit $?
