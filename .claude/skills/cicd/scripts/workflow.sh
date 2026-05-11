@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
 # Steward cicd workflow — thin layer over `agex pr` plus two steward
 # extensions (`status`, `await`) for SonarCloud gating and triage flow.
 #
@@ -33,8 +35,6 @@
 #                              — fixed pre-sleep, deprecated.
 #
 #   help                   print this message
-
-set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -97,11 +97,18 @@ case "$cmd" in
         fi
 
         # 1. agex pr read --wait — readiness loop + briefing.
+        # Capture rc from the command itself (not from the negated test —
+        # `if ! cmd; then rc=$?` would store the if-test status, always 0
+        # in the failure branch, masking the real exit code).
         echo "── agex pr read ──────────────────────────────────────────────────────" >&2
-        if ! agex pr read --agent "$AGEX_AGENT" "$PR" "${WAIT_ARGS[@]}"; then
-            rc=$?
-            echo "✗ agex pr read failed (exit $rc)" >&2
-            exit "$rc"
+        if agex pr read --agent "$AGEX_AGENT" "$PR" "${WAIT_ARGS[@]}"; then
+            READ_RC=0
+        else
+            READ_RC=$?
+        fi
+        if [ "$READ_RC" -ne 0 ]; then
+            echo "✗ agex pr read failed (exit $READ_RC)" >&2
+            exit "$READ_RC"
         fi
 
         # 2. pr-status.sh — authoritative gate (Sonar QG, unresolved threads).
@@ -140,7 +147,7 @@ case "$cmd" in
         echo "✓ no SonarCloud ERROR, no unresolved threads" >&2
         ;;
     help|--help|-h)
-        sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
+        sed -n '4,38p' "${BASH_SOURCE[0]}" | sed 's/^# *//'
         ;;
     *)
         echo "unknown subcommand: $cmd" >&2

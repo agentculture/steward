@@ -1,0 +1,4 @@
+{"ts":"2026-05-11T21:00:03.580109+00:00","type":"pr_opened","pr":30,"title":"refactor(cicd): delegate to agex pr; keep status + await extensions"}
+{"ts":"2026-05-11T21:01:06.654584+00:00","type":"readiness_arrived","pr":30,"waited_secs":60}
+{"ts":"2026-05-11T21:01:09.922165+00:00","type":"pr_read","pr":30,"comment_count":2,"threads_unresolved":0,"ci_state":"ok"}
+{"ts":"2026-05-11T21:16:37.732679+00:00","type":"pr_read","pr":30,"comment_count":6,"threads_unresolved":3,"ci_state":"ok"}

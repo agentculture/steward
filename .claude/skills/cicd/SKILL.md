@@ -103,25 +103,13 @@ This pattern was originally borrowed from sibling repo
 skill. The async guidance is also filed upstream
 ([agex-cli#41](https://github.com/agentculture/agex-cli/issues/41)).
 
-## End-to-end flow
+## Conventions
 
-```text
-git checkout -b <type>/<desc>
-# ... edit ...
-.claude/skills/cicd/scripts/workflow.sh lint
-git commit -am "..." && git push -u origin <branch>
-.claude/skills/cicd/scripts/workflow.sh open \
-    --title "..." --body-file body.md          # title <70 chars
-# briefing arrives via --delayed-read; triage; if CLAUDE.md / culture.yaml
-# / .claude/skills changed:
-.claude/skills/cicd/scripts/workflow.sh delta
-# fix, re-lint, push, then wait for readiness + gate:
-.claude/skills/cicd/scripts/workflow.sh await <PR>
-# triage comments, prepare replies.jsonl, then:
-.claude/skills/cicd/scripts/workflow.sh reply <PR> < replies.jsonl
-# rerun await after each push until clean.
-# Wait for human merge — never merge yourself.
-```
+`agex pr` emits a **"Next step:"** footer at the end of every command
+that names the right next verb (the same chain `agex learn cicd`
+documents) — follow that rather than memorizing an order. `workflow.sh
+help` mirrors the verb table when you need the steward-flavored
+extensions (`status`, `await`) on top.
 
 Branch naming: `fix/<desc>`, `feat/<desc>`, `docs/<desc>`,
 `skill/<name>`. PR / comment signature: `- <nick> (Claude)`, where
