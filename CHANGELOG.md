@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/). This project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-05-11
+
+### Changed
+
+- **`cicd` skill is now a thin delegate to `agex pr`.** `workflow.sh`'s
+  `lint`, `open`, `read`, `reply`, and `delta` subcommands forward to
+  `agex pr lint|open|read|reply|delta` (in `agentculture/agex-cli`).
+  agex covers the same portability + alignment-trigger rules in `lint`,
+  the auto-signed `gh pr create --delayed-read` in `open`, JSONL batch
+  reply + thread-resolve in `reply`, the sibling alignment dump in
+  `delta`, and now the unified briefing (CI checks, SonarCloud gate +
+  new issues, comments, next-step footer) in `read` — with optional
+  `--wait N` readiness polling. Steward keeps two extensions: `status`
+  (SonarCloud quality gate + OPEN issues + hotspots + unresolved-thread
+  tally + deploy-preview URL) and `await` (composes `agex pr read
+  --wait` with `status`, exits non-zero on Sonar ERROR or unresolved
+  threads). Both extensions are filed upstream as
+  [agex-cli#41](https://github.com/agentculture/agex-cli/issues/41) and
+  migrate out of steward when they land.
+- **`docs/skill-sources.md`** — `cicd` row updated to record agex-cli
+  as the new upstream for the overlap verbs and to flag the two
+  remaining steward extensions.
+
+### Removed
+
+- **`.claude/skills/cicd/scripts/create-pr-and-wait.sh`,
+  `pr-batch.sh`, `pr-comments.sh`, `wait-and-check.sh`,
+  `poll-readiness.sh`.** All replaced by `agex pr` verbs. The vendored
+  single-comment helper `pr-reply.sh` (with its `_resolve-nick.sh`
+  dependency) and `portability-lint.sh` are still shipped — pinned by
+  the existing test suite (`tests/test_pr_reply_signature.py`,
+  `tests/test_resolve_nick.py`) and by `steward doctor`'s portability
+  check respectively. Both are scheduled for follow-up migration.
+
 ## [0.11.1] - 2026-05-10
 
 ### Added
