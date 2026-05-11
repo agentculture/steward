@@ -226,3 +226,6 @@ __marimo__/
 
 # Claude Code harness runtime artifacts (per-machine, not source).
 .claude/scheduled_tasks.lock
+
+# agex local PR event journal (per-machine telemetry)
+.agex/
